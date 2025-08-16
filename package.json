@@ -1,0 +1,112 @@
+{
+  "name": "i18n-boost",
+  "displayName": "i18n-boost",
+  "publisher": "mrgwdev",
+  "version": "0.0.3",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "icon": "src/images/icon.png",
+  "description": "A Visual Studio Code extension to enhance internationalization (i18n) workflows by providing features like translation key copying, locale management, and configuration setup.",
+  "categories": [
+    "Other",
+    "Languages"
+  ],
+  "keywords": [
+    "i18n",
+    "internationalization",
+    "localization",
+    "translation",
+    "json",
+    "typescript",
+    "javascript"
+  ],
+  "activationEvents": [
+    "onCommand:i18nBoost.copyFullKey",
+    "onCommand:i18nBoost.createConfig",
+    "onCommand:i18nBoost.showLocales",
+    "onCommand:i18nBoost.selectLocale",
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "i18nBoost.copyFullKey",
+        "title": "I18n Boost: Copy translation key"
+      },
+      {
+        "command": "i18nBoost.createConfig",
+        "title": "I18n Boost: Create config file"
+      },
+      {
+        "command": "i18nBoost.showLocales",
+        "title": "I18n Boost: Show available locales"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "i18nBoost.copyFullKey",
+          "when": "editorTextFocus && editorLangId == 'json'",
+          "group": "navigation"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "i18nBoost.createConfig",
+          "when": "explorerResourceIsFolder",
+          "group": "7_modification"
+        }
+      ]
+    },
+    "configuration": {
+      "type": "object",
+      "title": "i18n-boost",
+      "properties": {
+        "i18nBoost.localesPath": {
+          "type": "string",
+          "default": "src/i18n",
+          "description": "Path to the folder that contains locale files. Can be relative to workspace root. (Note: This setting is overridden by i18nBoost.config.ts if present)"
+        },
+        "i18nBoost.functionNames": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "t",
+            "translate"
+          ],
+          "description": "Function names to consider for completion/navigation. (Note: This setting is overridden by i18nBoost.config.ts if present)"
+        },
+        "i18nBoost.defaultLocale": {
+          "type": "string",
+          "default": "en",
+          "description": "Default locale file name (without extension). (Note: This setting is overridden by i18nBoost.config.ts if present)"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "test": "node ./out/test/runTest.js"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^3.6.0",
+    "typescript": "^4.9.5"
+  },
+  "dependencies": {
+    "@vscode/test-electron": "^2.5.2",
+    "jsonc-parser": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mrgwd/mrgwd.git"
+  }
+}
