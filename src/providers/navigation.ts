@@ -10,7 +10,6 @@ export class I18nNavigationProvider implements vscode.DefinitionProvider {
   async provideDefinition(
     document: vscode.TextDocument,
     position: vscode.Position
-    // token: vscode.CancellationToken
   ): Promise<vscode.Definition | null> {
     const config = await this.configManager.loadConfig();
     if (!config || !config.enabled) {
@@ -90,12 +89,49 @@ export class I18nNavigationProvider implements vscode.DefinitionProvider {
         const matchEnd = matchStart + match[1].length;
 
         if (cursorChar >= matchStart && cursorChar <= matchEnd) {
-          return match[1];
+          const fullKey = match[1];
+          // Determine which segment the user clicked on
+          return this.getClickedSegment(fullKey, cursorChar - matchStart);
         }
       }
     }
 
     return null;
+  }
+
+  /**
+   * Determine which segment of the key the user clicked on
+   * @param fullKey The complete key (e.g., "dashboard.sidebar.title")
+   * @param relativeCursorPos The cursor position relative to the start of the key string
+   * @returns The key up to the clicked segment (e.g., "dashboard" or "dashboard.sidebar")
+   */
+  private getClickedSegment(
+    fullKey: string,
+    relativeCursorPos: number
+  ): string {
+    if (relativeCursorPos <= 0) {
+      return fullKey; // Clicked at the very beginning, return full key
+    }
+
+    const segments = fullKey.split(".");
+    let currentPos = 0;
+
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i];
+      const segmentEnd = currentPos + segment.length;
+
+      // If cursor is within this segment (including the dot separator)
+      if (relativeCursorPos <= segmentEnd) {
+        // Return the key up to and including this segment
+        return segments.slice(0, i + 1).join(".");
+      }
+
+      // Move to next segment (accounting for the dot separator)
+      currentPos = segmentEnd + 1;
+    }
+
+    // If we get here, cursor is after the last segment, return full key
+    return fullKey;
   }
 
   /**
