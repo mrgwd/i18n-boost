@@ -15,6 +15,21 @@ export class I18nCompletionProvider implements vscode.CompletionItemProvider {
     this.loadTranslations();
     // Reload translations when the config changes
     vscode.workspace.onDidChangeConfiguration(() => this.loadTranslations());
+
+    // Also reload when the default locale file is saved/changed
+    (async () => {
+      const config = await this.configManager.loadConfig();
+      if (!config) return;
+      const defaultLocaleFile = this.configManager.getLocaleFilePath(
+        config.defaultLocale,
+        config
+      );
+      const watcher =
+        vscode.workspace.createFileSystemWatcher(defaultLocaleFile);
+      watcher.onDidChange(() => this.loadTranslations());
+      watcher.onDidCreate(() => this.loadTranslations());
+      watcher.onDidDelete(() => (this.translations = {}));
+    })();
   }
 
   /**
@@ -80,6 +95,7 @@ export class I18nCompletionProvider implements vscode.CompletionItemProvider {
     if (baseKey && keyPath.length === 0) {
       keyPath = baseKey + ".";
     } else if (baseKey && !keyPath.startsWith(baseKey + ".")) {
+      // User is typing t("some.key") with a base key, combine them
       keyPath = baseKey + "." + keyPath;
     }
     // --- End base key logic ---
@@ -93,7 +109,16 @@ export class I18nCompletionProvider implements vscode.CompletionItemProvider {
       for (let i = 0; i < pathParts.length; i++) {
         const part = pathParts[i];
         if (i === pathParts.length - 1 && !keyPath.endsWith(".")) {
-          lastPart = part;
+          // If this is the last part and the key doesn't end with a dot,
+          // check if the user is currently typing something
+          const userInput = match[1]; // What the user actually typed in t("...")
+          if (userInput.length === 0) {
+            // User typed t("") with a base key, suggest all children
+            lastPart = "";
+          } else {
+            // User is typing a partial key, use it as the filter
+            lastPart = part;
+          }
         } else if (currentObject[part]) {
           currentObject = currentObject[part];
         } else {
