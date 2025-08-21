@@ -160,9 +160,7 @@ export class I18nCompletionProvider implements vscode.CompletionItemProvider {
         };
       } else {
         item.insertText = key;
-        item.documentation = new vscode.MarkdownString(
-          `**Translation:** \`${value}\``
-        );
+        item.detail = `  ${value}`;
       }
 
       suggestions.push(item);
