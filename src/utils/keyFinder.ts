@@ -1,5 +1,5 @@
 import * as fs from "fs";
-import { parseTree, getLocation, ParseError } from "jsonc-parser";
+import { parseTree, ParseError } from "jsonc-parser";
 
 export interface KeyPosition {
   line: number;
