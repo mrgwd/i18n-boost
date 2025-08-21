@@ -1,20 +1,12 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
+import { I18nBoostConfig } from "../types";
 
-export interface i18nBoostConfig {
-  localesPath: string;
-  defaultLocale: string;
-  supportedLocales: string[];
-  functionNames: string[];
-  fileNamingPattern: "locale.json" | "locale/common.json" | "locale/index.json";
-  enabled: boolean;
-}
-
-const CONFIG_FILE_NAME = "i18nBoost.config.ts";
+const CONFIG_FILE_NAME = "i18nBoost.config.ts" as const;
 
 export class ConfigManager {
-  private config: i18nBoostConfig | null = null;
+  private config: I18nBoostConfig | null = null;
   private configPath: string | null = null;
 
   async hasConfig(): Promise<boolean> {
@@ -31,7 +23,7 @@ export class ConfigManager {
     return false;
   }
 
-  async loadConfig(): Promise<i18nBoostConfig | null> {
+  async loadConfig(): Promise<I18nBoostConfig | null> {
     if (this.config) return this.config;
 
     if (!(await this.hasConfig()) || !this.configPath) {
@@ -48,19 +40,19 @@ export class ConfigManager {
     }
   }
 
-  private parseTypeScriptConfig(content: string): i18nBoostConfig {
+  private parseTypeScriptConfig(content: string): I18nBoostConfig {
     // Remove comments
     const withoutComments = content
       .replace(/\/\/.*$/gm, "")
       .replace(/\/\*[\s\S]*?\*\//g, "");
 
-    // Extract the default export object
+    // Extract the export const with type annotation
     const exportMatch = withoutComments.match(
-      /export\s+const\s+I18nBoostConfig\s+=\s+({[\s\S]*?});?\s*$/
+      /export\s+const\s+i18nBoostConfig\s*:\s*I18nBoostConfig\s*=\s*({[\s\S]*?});?\s*$/
     );
     if (!exportMatch) {
       throw new Error(
-        "Config file must have a default export with configuration object"
+        "Config file must have an export const with I18nBoostConfig type annotation"
       );
     }
 
@@ -165,7 +157,7 @@ export class ConfigManager {
   /**
    * Get file path for a specific locale
    */
-  getLocaleFilePath(locale: string, config?: i18nBoostConfig): string {
+  getLocaleFilePath(locale: string, config?: I18nBoostConfig): string {
     const activeConfig = config || this.config;
     if (!activeConfig) {
       throw new Error("No configuration loaded");
