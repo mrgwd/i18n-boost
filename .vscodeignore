@@ -1,0 +1,35 @@
+# Development files
+.vscode/**
+.vscode-test/**
+out/test/**
+src/**
+.gitignore
+.yarnrc
+vsc-extension-quickstart.md
+**/tsconfig.json
+**/.eslintrc.json
+**/*.map
+**/*.ts
+pnpm-lock.yaml
+
+# Build output that's not needed
+.github/**
+.git/**
+**/test/**
+
+# Misc files
+.editorconfig
+.eslintignore
+.prettierrc
+CHANGELOG.md
+CONTRIBUTING.md
+**/*.vsix
+
+# Keep only necessary files
+!node_modules/**
+!out/extension.js
+!out/extension.js.map
+!src/images/icon.*
+!README.md
+!LICENSE.md
+!package.json
