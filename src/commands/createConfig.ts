@@ -2,16 +2,12 @@ import * as vscode from "vscode";
 import * as path from "path";
 import * as fs from "fs";
 
-const CONFIG_FILE_NAME = "i18nBoost.config.ts";
+const CONFIG_FILE_NAME = "i18nBoost.config.ts" as const;
 
 export function registerCreateConfigCommand(): vscode.Disposable {
-  const disposable = vscode.commands.registerCommand(
-    "i18nBoost.createConfig",
-    async () => {
-      await createConfigFile();
-    }
-  );
-  return disposable;
+  return vscode.commands.registerCommand("i18nBoost.createConfig", async () => {
+    await createConfigFile();
+  });
 }
 
 async function createConfigFile() {
@@ -21,27 +17,36 @@ async function createConfigFile() {
     return;
   }
 
-  const configTemplate = `// I18n Boost Configuration
-export default {
-    // Path to your translation files folder (relative to workspace root)
-    localesPath: 'src/i18n',
-    
-    // Default locale to navigate to on Ctrl+Click
-    defaultLocale: 'en',
-    
-    // All supported locales in your project
-    supportedLocales: ['en', 'ar', 'fr', 'es', 'de'],
-    
-    // Function names that indicate translation keys
-    functionNames: ['t', 'translate', '$t', 'i18n.t'],
-    
-    // File naming pattern for your locale files
-    // Options: 'locale.json', 'locale/common.json', 'locale/index.json'
-    fileNamingPattern: 'locale.json',
-    
-    // Enable/disable the extension features
-    enabled: true
-};`;
+  const configTemplate = `
+export const i18nBoostConfig:I18nBoostConfig = {
+  // Path to your translation files folder (relative to workspace root)
+  localesPath: 'src/i18n',
+  
+  // Default locale to navigate to on Ctrl+Click
+  defaultLocale: 'en',
+  
+  // All supported locales in your project
+  supportedLocales: ['en'],
+  
+  // Function names that indicate translation keys
+  functionNames: ['t', 'translate', '$t', 'i18n.t'],
+  
+  // File naming pattern for your locale files
+  // Options: 'locale.json', 'locale/common.json', 'locale/index.json'
+  fileNamingPattern: 'locale.json',
+  
+  // Enable/disable the extension features
+  enabled: true
+};
+
+interface I18nBoostConfig {
+  localesPath: string;
+  defaultLocale: string;
+  supportedLocales: string[];
+  functionNames: string[];
+  fileNamingPattern: "locale.json" | "locale/common.json" | "locale/index.json";
+  enabled: boolean;
+}`;
 
   const configPath = path.join(
     workspaceFolders[0].uri.fsPath,
@@ -63,10 +68,13 @@ export default {
       "I18n Boost config file created successfully!"
     );
 
-    // Open the config file
     const document = await vscode.workspace.openTextDocument(configPath);
     await vscode.window.showTextDocument(document);
-  } catch (error) {
-    vscode.window.showErrorMessage(`Failed to create config file: ${error}`);
+  } catch (error: unknown) {
+    vscode.window.showErrorMessage(
+      `Failed to create config file: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
   }
 }

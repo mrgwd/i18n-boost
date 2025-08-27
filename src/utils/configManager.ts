@@ -56,8 +56,8 @@ export class ConfigManager {
       );
     }
 
-    let configObjectStr = exportMatch[1];
-    const config: any = {};
+    const configObjectStr = exportMatch[1];
+    const config: Record<string, any> = {};
 
     // Extract string properties
     const stringProps = ["localesPath", "defaultLocale", "fileNamingPattern"];

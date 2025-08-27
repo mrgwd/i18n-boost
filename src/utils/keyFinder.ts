@@ -18,7 +18,7 @@ export async function findKeyInJsonFile(
     const content = fs.readFileSync(filePath, "utf8");
     return findKeyPosition(key, content);
   } catch (error) {
-    console.error(`Error reading file ${filePath}:`, error);
+    // Error reading file
     return null;
   }
 }
@@ -34,7 +34,7 @@ export function findKeyPosition(
   const root = parseTree(jsonContent, errors, { allowTrailingComma: true });
 
   if (!root || errors.length > 0) {
-    console.error("Failed to parse JSON:", errors);
+    // Failed to parse JSON
     return null;
   }
 
@@ -144,20 +144,11 @@ function isCorrectNestingContext(
   lineIndex: number
 ): boolean {
   const lines = jsonContent.split("\n");
-  let currentLevel = 0;
   let foundParts = 0;
 
   // Look backwards from the current line to verify the nesting structure
   for (let i = lineIndex; i >= 0; i--) {
     const line = lines[i].trim();
-
-    // Count closing braces (going backwards, so these increase our level)
-    const closeBraces = (line.match(/}/g) || []).length;
-    currentLevel += closeBraces;
-
-    // Count opening braces (going backwards, so these decrease our level)
-    const openBraces = (line.match(/{/g) || []).length;
-    currentLevel -= openBraces;
 
     // Check if this line contains one of our parent keys
     if (foundParts < keyParts.length - 1) {

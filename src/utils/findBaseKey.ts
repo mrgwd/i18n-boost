@@ -6,7 +6,7 @@ export function findBaseKey(
   document: vscode.TextDocument,
   position: vscode.Position
 ): string | null {
-  const useTranslationRegex = /useTranslations?\s*\(\s*["'\`]([^"'\`]+)["'\`]/;
+  const useTranslationRegex = /useTranslations?\s*\(\s*["'`]([^"'`]+)["'`]/;
   for (let lineNum = position.line; lineNum >= 0; lineNum--) {
     const lineText = document.lineAt(lineNum).text;
     const match = useTranslationRegex.exec(lineText);

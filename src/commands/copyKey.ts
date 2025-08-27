@@ -38,10 +38,7 @@ export function registerCopyFullKeyCommand(): vscode.Disposable {
           `Copied translation key: ${keyPath}`
         );
       } catch (err) {
-        console.error(err);
-        vscode.window.showErrorMessage(
-          "i18n-boost: Failed to copy key (see console)"
-        );
+        vscode.window.showErrorMessage("i18n-boost: Failed to copy key");
       }
     }
   );

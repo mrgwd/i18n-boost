@@ -9,7 +9,7 @@ import { findBaseKey } from "../utils/findBaseKey";
  * It suggests keys based on the user's input within configured function calls.
  */
 export class I18nCompletionProvider implements vscode.CompletionItemProvider {
-  private translations: any = {};
+  private translations: Record<string, any> = {};
 
   constructor(private configManager: ConfigManager) {
     this.loadTranslations();
@@ -54,7 +54,7 @@ export class I18nCompletionProvider implements vscode.CompletionItemProvider {
         this.translations = {};
       }
     } catch (error) {
-      console.error("Failed to load or parse translation file:", error);
+      // Failed to load or parse translation file
       this.translations = {};
     }
   }
@@ -102,7 +102,7 @@ export class I18nCompletionProvider implements vscode.CompletionItemProvider {
 
     const pathParts = keyPath.split(".").filter((p) => p.length > 0);
 
-    let currentObject: any = this.translations;
+    let currentObject: Record<string, any> = this.translations;
     let lastPart = "";
 
     try {
@@ -126,7 +126,7 @@ export class I18nCompletionProvider implements vscode.CompletionItemProvider {
         }
       }
     } catch (error) {
-      console.error("Error navigating translation keys:", error);
+      // Error navigating translation keys
       return [];
     }
 

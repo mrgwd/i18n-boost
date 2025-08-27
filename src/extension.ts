@@ -6,15 +6,17 @@ import { registerSelectLocaleCommand } from "./commands/selectLocale";
 import { ConfigManager } from "./utils/configManager";
 import { I18nNavigationProvider } from "./providers/navigation";
 import { I18nCompletionProvider } from "./providers/completion";
+import { I18nUnusedKeysDiagnostics } from "./providers/unusedKeys";
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log("i18n-boost activated");
+  // Extension activated
 
   // Initialize config manager and navigation provider
   const configManager = new ConfigManager();
   const navigationProvider = new I18nNavigationProvider(configManager);
-  const cmpletionProvider = new I18nCompletionProvider(configManager);
+  const completionProvider = new I18nCompletionProvider(configManager);
   const completionTrigger: string[] = ["'", '"', "."];
+  const unusedKeysDiagnostics = new I18nUnusedKeysDiagnostics(configManager);
 
   // Register definition provider for Ctrl+Click navigation
   const selector: vscode.DocumentSelector = [
@@ -40,10 +42,13 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.languages.registerCompletionItemProvider(
       selector,
-      cmpletionProvider,
+      completionProvider,
       ...completionTrigger
     )
   );
+
+  // Register unused keys diagnostics
+  unusedKeysDiagnostics.register(context);
 
   // Show welcome message if no config exists (after a delay to avoid startup noise)
   setTimeout(async () => {
