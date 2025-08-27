@@ -1,0 +1,132 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to release (e.g., 1.0.0)"
+        required: true
+        type: string
+
+jobs:
+  release:
+    name: Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+      - name: Compile TypeScript
+        run: npm run compile
+
+      - name: Package extension
+        run: npx vsce package --no-dependencies
+
+      - name: Get version from tag or input
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          release_name: Release v${{ steps.version.outputs.version }}
+          body: |
+            ## What's New in v${{ steps.version.outputs.version }}
+
+            See [CHANGELOG.md](CHANGELOG.md) for detailed changes.
+
+            ## Installation
+
+            ### From VS Code Marketplace
+            1. Open VS Code
+            2. Go to Extensions (Ctrl+Shift+X)
+            3. Search for "I18n Boost"
+            4. Click Install
+
+            ### From VSIX File
+            1. Download the `i18n-boost-${{ steps.version.outputs.version }}.vsix` file below
+            2. Open VS Code
+            3. Go to Extensions → ... → Install from VSIX
+            4. Select the downloaded file
+
+            ## Features
+            - 🚀 Autocomplete for translation keys
+            - 🎯 Ctrl+Click navigation to locale files
+            - 🔍 Unused translation keys detection
+            - 📋 Copy full translation key paths
+            - ⚙️ Flexible configuration options
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, 'beta') || contains(steps.version.outputs.version, 'alpha') }}
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: ./i18n-boost-${{ steps.version.outputs.version }}.vsix
+          asset_name: i18n-boost-${{ steps.version.outputs.version }}.vsix
+          asset_content_type: application/octet-stream
+
+  publish-marketplace:
+    name: Publish to VS Code Marketplace
+    runs-on: ubuntu-latest
+    needs: release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.x"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Compile TypeScript
+        run: npm run compile
+
+      - name: Package extension
+        run: npx vsce package --no-dependencies
+
+      - name: Get version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Publish to VS Code Marketplace
+        run: npx vsce publish --no-dependencies
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
