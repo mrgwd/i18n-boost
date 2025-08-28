@@ -1,4 +1,4 @@
-# <img width="36" height="36" alt="image" src="https://github.com/user-attachments/assets/18c37cb2-42e9-4fe6-b1f0-f2501ae67de5" /> I18n Boost
+# <img width="36" height="36" alt="image" src="https://raw.githubusercontent.com/mrgwd/i18n-boost/main/src/images/icon.webp" /> I18n Boost
 
 Designed to supercharge your internationalization (i18n) workflow. Integrates directly into your editor to help you **navigate, manage, and use translation keys faster**. Helps you **boost** your productivity and avoid errors.
 
@@ -8,7 +8,7 @@ Designed to supercharge your internationalization (i18n) workflow. Integrates di
 
 Get real-time suggestions for translation keys while typing inside your translation function calls.
 
-![ezgif-5103668ab9dcd811](https://github.com/user-attachments/assets/27a49443-1d4c-4104-bf44-b3cc998c8926)
+![autocomplete](https://raw.githubusercontent.com/mrgwd/i18n-boost/main/assets/autocomplete.gif)
 
 **How it works:**
 
@@ -22,7 +22,7 @@ Get real-time suggestions for translation keys while typing inside your translat
 
 Navigate directly from a translation key in your code to its definition in your locale file.
 
-![ezgif-13cb8d05e1db43](https://github.com/user-attachments/assets/dc0cc293-95b5-4f8f-b600-c98bcd624240)
+![ctrl-click](https://raw.githubusercontent.com/mrgwd/i18n-boost/main/assets/ctrl-click.gif)
 
 **How it works:**
 
@@ -35,7 +35,7 @@ Navigate directly from a translation key in your code to its definition in your 
 
 Scans your codebase to find translation keys that are defined but never used. Just like the `no-unused-vars` rule in ESLint, but for i18n keys!
 
-![ezgif-583ca4f4134a5b](https://github.com/user-attachments/assets/aca9091e-4ab6-41a1-976f-e05d199ca7be)
+![unused-keys](https://raw.githubusercontent.com/mrgwd/i18n-boost/main/assets/unused-keys.gif)
 
 **How it works:**
 
@@ -49,7 +49,7 @@ Scans your codebase to find translation keys that are defined but never used. Ju
 
 Effortlessly copy the full nested key path of any translation value in your locale file.
 
-![copy-key-path](https://github.com/user-attachments/assets/6bee026e-3010-43c5-b048-eec1707cc09a)
+![copy-key-path](https://raw.githubusercontent.com/mrgwd/i18n-boost/main/assets/copy-key-path.gif)
 
 **How it works:**
 
