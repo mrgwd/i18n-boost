@@ -11,6 +11,7 @@ vsc-extension-quickstart.md
 **/*.map
 **/*.ts
 pnpm-lock.yaml
+assets/**
 
 # Build output that's not needed
 .github/**
