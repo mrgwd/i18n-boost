@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## 0.0.1 (2025-08-27)
+## 1.0.0 (2025-08-27)
 
 ### Added
 
@@ -14,3 +14,10 @@ All notable changes to this project will be documented in this file.
 - Config file creation and management.
 
 ---
+
+## 1.0.1 (2025-09-11)
+
+### Fixed
+
+- Fixed an issue with unused keys cache not updating correctly.
+- Fixed a bug where the autocomplete would not show suggestions on first install.
