@@ -89,6 +89,8 @@ export class I18nUnusedKeysDiagnostics {
   }
 
   private async recomputeUsedKeysAndRefresh() {
+    // Clear the timer to prevent race conditions
+    this.recomputeTimer = null;
     await this.computeUsedKeys();
     for (const doc of vscode.workspace.textDocuments) {
       this.refreshFor(doc);
@@ -283,6 +285,8 @@ export class I18nUnusedKeysDiagnostics {
         }
       }
 
+      // Replace the cache with the newly computed set of used keys
+      // This ensures keys that are no longer used will be properly flagged as unused
       this.usedKeysCache = used;
     } finally {
       this.isComputing = false;
