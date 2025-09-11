@@ -2,7 +2,7 @@
   "name": "i18n-boost",
   "displayName": "I18n Boost",
   "publisher": "mrgwd",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "engines": {
     "vscode": "^1.80.0"
   },
