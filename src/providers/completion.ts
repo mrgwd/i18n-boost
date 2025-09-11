@@ -11,10 +11,19 @@ import { findBaseKey } from "../utils/findBaseKey";
 export class I18nCompletionProvider implements vscode.CompletionItemProvider {
   private translations: Record<string, any> = {};
 
-  constructor(private configManager: ConfigManager) {
+  constructor(
+    private configManager: ConfigManager,
+    onConfigChange?: () => void
+  ) {
     this.loadTranslations();
     // Reload translations when the config changes
     vscode.workspace.onDidChangeConfiguration(() => this.loadTranslations());
+
+    // Listen for config file changes
+    if (onConfigChange) {
+      // Call the callback immediately to set up the listener
+      onConfigChange();
+    }
 
     // Also reload when the default locale file is saved/changed
     (async () => {
@@ -30,6 +39,13 @@ export class I18nCompletionProvider implements vscode.CompletionItemProvider {
       watcher.onDidCreate(() => this.loadTranslations());
       watcher.onDidDelete(() => (this.translations = {}));
     })();
+  }
+
+  /**
+   * Method to reload translations when config changes
+   */
+  public reloadTranslations() {
+    this.loadTranslations();
   }
 
   /**
@@ -137,7 +153,6 @@ export class I18nCompletionProvider implements vscode.CompletionItemProvider {
     const suggestions: vscode.CompletionItem[] = [];
     const keys = Object.keys(currentObject);
     const filteredKeys = keys.filter((key) => key.startsWith(lastPart));
-
     for (const key of filteredKeys) {
       const value = currentObject[key];
       const isObject = typeof value === "object" && value !== null;
