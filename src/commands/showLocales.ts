@@ -1,10 +1,10 @@
-import * as vscode from "vscode";
 import { ConfigManager } from "../utils/configManager";
+import { commands, Disposable, window } from "vscode";
 
 export function registerShowLocalesCommand(
   configManager: ConfigManager
-): vscode.Disposable {
-  const disposable = vscode.commands.registerCommand(
+): Disposable {
+  const disposable = commands.registerCommand(
     "i18nBoost.showLocales",
     async () => {
       await showAvailableLocales(configManager);
@@ -14,25 +14,18 @@ export function registerShowLocalesCommand(
 }
 
 async function showAvailableLocales(configManager: ConfigManager) {
-  const config = await configManager.loadConfig();
-  if (!config) {
-    vscode.window
-      .showWarningMessage(
-        "No configuration found. Please create a i18nBoost.config.ts file first.",
-        "Create Config"
-      )
-      .then((selection) => {
-        if (selection === "Create Config") {
-          vscode.commands.executeCommand("i18nBoost.createConfig");
-        }
-      });
+  const enabled = await configManager.isEnabled();
+  if (!enabled) {
+    window.showWarningMessage(
+      "I18n Boost is disabled. Please enable it in VS Code settings."
+    );
     return;
   }
 
-  const locales = await configManager.getAvailableLocales();
+  const locales = await configManager.getSupportedLocales();
 
   if (locales.length === 0) {
-    vscode.window.showInformationMessage("No locales configured.");
+    window.showInformationMessage("No locales configured.");
     return;
   }
 
@@ -43,9 +36,10 @@ async function showAvailableLocales(configManager: ConfigManager) {
       }`
   );
 
+  const localesPath = await configManager.getLocalesPath();
   const message = `Available locales:\n\n${items.join(
     "\n"
-  )}\n\nLocales path: ${configManager.getLocalesPath()}`;
+  )}\n\nLocales path: ${localesPath}`;
 
-  vscode.window.showInformationMessage(message, { modal: true });
+  window.showInformationMessage(message, { modal: true });
 }

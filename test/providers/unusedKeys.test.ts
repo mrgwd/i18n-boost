@@ -2,7 +2,7 @@ import { strict as assert } from "assert";
 import "../setup";
 import { mockVscode } from "../setup";
 import { I18nUnusedKeysDiagnostics } from "../../src/providers/unusedKeys";
-import { I18nBoostConfig } from "../../src/types";
+import { beforeEach, describe, it } from "mocha";
 
 describe("I18nUnusedKeysDiagnostics", () => {
   let diagnostics: I18nUnusedKeysDiagnostics;
@@ -12,8 +12,10 @@ describe("I18nUnusedKeysDiagnostics", () => {
   beforeEach(() => {
     // Create mock config manager
     mockConfigManager = {
-      loadConfig: () => Promise.resolve(null),
-      getLocalesPath: () => null,
+      isEnabled: () => Promise.resolve(false),
+      getLocalesPath: () => Promise.resolve(null),
+      getFunctionNames: () => Promise.resolve(["t", "translate"]),
+      getFileNamingPattern: () => Promise.resolve("locale.json"),
     };
 
     // Create mock extension context
@@ -266,7 +268,7 @@ describe("I18nUnusedKeysDiagnostics", () => {
 
   describe("getLocalesGlob", () => {
     it("should return correct glob for locale.json pattern", async () => {
-      const mockConfig: I18nBoostConfig = {
+      const mockConfig = {
         localesPath: "/path/to/locales",
         defaultLocale: "en",
         supportedLocales: ["en", "es"],
@@ -283,17 +285,10 @@ describe("I18nUnusedKeysDiagnostics", () => {
     });
 
     it("should return correct glob for locale/common.json pattern", async () => {
-      const mockConfig: I18nBoostConfig = {
-        localesPath: "/path/to/locales",
-        defaultLocale: "en",
-        supportedLocales: ["en", "es"],
-        functionNames: ["t"],
-        fileNamingPattern: "locale/common.json",
-        enabled: true,
-      };
-
-      mockConfigManager.loadConfig = () => Promise.resolve(mockConfig);
-      mockConfigManager.getLocalesPath = () => "/path/to/locales";
+      mockConfigManager.getLocalesPath = () =>
+        Promise.resolve("/path/to/locales");
+      mockConfigManager.getFileNamingPattern = () =>
+        Promise.resolve("locale/common.json");
 
       const result = await (diagnostics as any).getLocalesGlob();
       assert.strictEqual(result, "/path/to/locales/*/common.json");
@@ -307,7 +302,7 @@ describe("I18nUnusedKeysDiagnostics", () => {
     });
 
     it("should return null when no locales path", async () => {
-      const mockConfig: I18nBoostConfig = {
+      const mockConfig = {
         localesPath: "/path/to/locales",
         defaultLocale: "en",
         supportedLocales: ["en", "es"],
@@ -438,16 +433,9 @@ describe("I18nUnusedKeysDiagnostics", () => {
 
   describe("computeUsedKeys", () => {
     it("should compute used keys from function calls", async () => {
-      const mockConfig: I18nBoostConfig = {
-        localesPath: "/path/to/locales",
-        defaultLocale: "en",
-        supportedLocales: ["en"],
-        functionNames: ["t", "translate"],
-        fileNamingPattern: "locale.json",
-        enabled: true,
-      };
-
-      mockConfigManager.loadConfig = () => Promise.resolve(mockConfig);
+      mockConfigManager.isEnabled = () => Promise.resolve(true);
+      mockConfigManager.getFunctionNames = () =>
+        Promise.resolve(["t", "translate"]);
 
       // Mock workspace.findFiles to return a test file
       const mockFiles = [{ uri: { fsPath: "/path/to/test.ts" } }];
@@ -463,16 +451,8 @@ describe("I18nUnusedKeysDiagnostics", () => {
     });
 
     it("should handle base key patterns", async () => {
-      const mockConfig: I18nBoostConfig = {
-        localesPath: "/path/to/locales",
-        defaultLocale: "en",
-        supportedLocales: ["en"],
-        functionNames: ["t"],
-        fileNamingPattern: "locale.json",
-        enabled: true,
-      };
-
-      mockConfigManager.loadConfig = () => Promise.resolve(mockConfig);
+      mockConfigManager.isEnabled = () => Promise.resolve(true);
+      mockConfigManager.getFunctionNames = () => Promise.resolve(["t"]);
 
       const mockFiles = [{ uri: { fsPath: "/path/to/test.ts" } }];
 
@@ -509,7 +489,7 @@ describe("I18nUnusedKeysDiagnostics", () => {
     });
 
     it("should clear cache when config is disabled", async () => {
-      const mockConfig: I18nBoostConfig = {
+      const mockConfig = {
         localesPath: "/path/to/locales",
         defaultLocale: "en",
         supportedLocales: ["en"],
