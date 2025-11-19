@@ -23,4 +23,4 @@ Thank you for your interest in contributing!
 
 ## Questions?
 
-Open an issue or start a discussion!
+Open an [issue](https://github.com/mrgwd/i18n-boost/issues) or start a discussion!
