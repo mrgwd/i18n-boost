@@ -2,7 +2,7 @@
   "name": "i18n-boost",
   "displayName": "I18n Boost",
   "publisher": "mrgwd",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "engines": {
     "vscode": "^1.80.0"
   },
@@ -29,7 +29,7 @@
     "onCommand:i18nBoost.selectLocale",
     "onStartupFinished"
   ],
-  "main": "./out/extension.js",
+  "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
@@ -52,46 +52,58 @@
           "when": "editorTextFocus && editorLangId == 'json'",
           "group": "navigation"
         }
-      ],
-      "explorer/context": [
-        {
-          "command": "i18nBoost.createConfig",
-          "when": "explorerResourceIsFolder",
-          "group": "7_modification"
-        }
       ]
     },
     "configuration": {
-      "type": "object",
-      "title": "i18n-boost",
+      "title": "I18n Boost Configuration",
       "properties": {
         "i18nBoost.localesPath": {
           "type": "string",
           "default": "src/i18n",
-          "description": "Path to the folder that contains locale files. Can be relative to workspace root. (Note: This setting is overridden by i18nBoost.config.ts if present)"
-        },
-        "i18nBoost.functionNames": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [
-            "t",
-            "translate"
-          ],
-          "description": "Function names to consider for completion/navigation. (Note: This setting is overridden by i18nBoost.config.ts if present)"
+          "description": "Path to translation files folder (relative to workspace root)."
         },
         "i18nBoost.defaultLocale": {
           "type": "string",
           "default": "en",
-          "description": "Default locale file name (without extension). (Note: This setting is overridden by i18nBoost.config.ts if present)"
+          "description": "Default locale to navigate to on Ctrl+Click."
+        },
+        "i18nBoost.functionNames": {
+          "type": "array",
+          "default": [
+            "t",
+            "translate",
+            "$t",
+            "i18n.t",
+            "t.raw",
+            "t.rich"
+          ],
+          "description": "Function names that indicate translation keys.",
+          "items": {
+            "type": "string"
+          }
+        },
+        "i18nBoost.fileNamingPattern": {
+          "type": "string",
+          "default": "locale.json",
+          "enum": [
+            "locale.json",
+            "locale/common.json",
+            "locale/index.json"
+          ],
+          "description": "Pattern for locale file naming."
+        },
+        "i18nBoost.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable/disable extension features."
         }
       }
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run compile",
+    "vscode:prepublish": "npm run bundle",
     "compile": "tsc -p ./",
+    "bundle": "esbuild src/extension.ts --bundle --platform=node --format=cjs --target=node16 --external:vscode --external:jsonc-parser --minify --outfile=dist/extension.js",
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile",
     "test": "mocha -r ts-node/register test/**/*.test.ts",

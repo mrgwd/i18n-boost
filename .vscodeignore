@@ -17,6 +17,12 @@ assets/**
 .github/**
 .git/**
 **/test/**
+out/**
+node_modules/**
+# Include only the minimal jsonc-parser runtime files
+!node_modules/jsonc-parser/package.json
+!node_modules/jsonc-parser/lib/umd/**
+node_modules/jsonc-parser/lib/esm/**
 
 # Misc files
 .editorconfig
@@ -27,10 +33,11 @@ CONTRIBUTING.md
 **/*.vsix
 
 # Keep only necessary files
-!node_modules/**
-!out/extension.js
-!out/extension.js.map
+!dist/extension.js
 !src/images/icon.*
 !README.md
+docs/**
+audit-ci.json
+.nycrc.json
 !LICENSE.md
 !package.json

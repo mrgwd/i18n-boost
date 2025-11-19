@@ -2,6 +2,7 @@ import { strict as assert } from "assert";
 import "../setup";
 import { mockVscode } from "../setup";
 import { registerCopyFullKeyCommand } from "../../src/commands/copyKey";
+import { afterEach, beforeEach, describe, it } from "mocha";
 
 describe("Copy Key Command", () => {
   let commandDisposable: any;
