@@ -2,7 +2,7 @@ import { strict as assert } from "assert";
 import "../setup";
 import { mockVscode } from "../setup";
 import { registerShowLocalesCommand } from "../../src/commands/showLocales";
-import { ConfigManager } from "../../src/utils/configManager";
+import { afterEach, beforeEach, describe, it } from "mocha";
 
 describe("Show Locales Command", () => {
   let commandDisposable: any;
@@ -11,21 +11,13 @@ describe("Show Locales Command", () => {
   beforeEach(() => {
     // Create mock config manager
     mockConfigManager = {
-      loadConfig: () =>
-        Promise.resolve({
-          localesPath: "/path/to/locales",
-          defaultLocale: "en",
-          supportedLocales: ["en", "es"],
-          functionNames: ["t", "translate"],
-          fileNamingPattern: "locale.json",
-          enabled: true,
-        }),
+      isEnabled: () => Promise.resolve(true),
       getAvailableLocales: () =>
         Promise.resolve([
           { locale: "en", path: "/path/to/locales/en.json", exists: true },
           { locale: "es", path: "/path/to/locales/es.json", exists: true },
         ]),
-      getLocalesPath: () => "/path/to/locales",
+      getLocalesPath: () => Promise.resolve("/path/to/locales"),
     };
 
     // Register the command

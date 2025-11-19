@@ -1,8 +1,7 @@
 import { strict as assert } from "assert";
 import "../setup";
-import { mockVscode } from "../setup";
 import { I18nNavigationProvider } from "../../src/providers/navigation";
-import { ConfigManager } from "../../src/utils/configManager";
+import { beforeEach, describe, it } from "mocha";
 
 describe("I18n Navigation Provider", () => {
   let provider: I18nNavigationProvider;
@@ -11,16 +10,11 @@ describe("I18n Navigation Provider", () => {
   beforeEach(() => {
     // Create mock config manager
     mockConfigManager = {
-      loadConfig: () =>
-        Promise.resolve({
-          localesPath: "/path/to/locales",
-          defaultLocale: "en",
-          supportedLocales: ["en", "es"],
-          functionNames: ["t", "translate"],
-          fileNamingPattern: "locale.json",
-          enabled: true,
-        }),
-      getLocaleFilePath: (locale: string) => `/path/to/locales/${locale}.json`,
+      isEnabled: () => Promise.resolve(true),
+      getFunctionNames: () => Promise.resolve(["t", "translate"]),
+      getDefaultLocale: () => Promise.resolve("en"),
+      getLocaleFilePath: (locale: string) =>
+        Promise.resolve(`/path/to/locales/${locale}.json`),
     };
 
     // Create provider
@@ -29,11 +23,7 @@ describe("I18n Navigation Provider", () => {
 
   describe("when config is disabled", () => {
     it("should return null", async () => {
-      mockConfigManager.loadConfig = () =>
-        Promise.resolve({
-          enabled: false,
-          functionNames: ["t"],
-        });
+      mockConfigManager.isEnabled = () => Promise.resolve(false);
 
       const mockDocument = {
         lineAt: () => ({ text: 't("hello")' }),

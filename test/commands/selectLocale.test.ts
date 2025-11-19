@@ -2,8 +2,7 @@ import { strict as assert } from "assert";
 import "../setup";
 import { mockVscode } from "../setup";
 import { registerSelectLocaleCommand } from "../../src/commands/selectLocale";
-import { ConfigManager } from "../../src/utils/configManager";
-import { I18nNavigationProvider } from "../../src/providers/navigation";
+import { afterEach, beforeEach, describe, it } from "mocha";
 
 describe("Select Locale Command", () => {
   let commandDisposable: any;
@@ -13,15 +12,7 @@ describe("Select Locale Command", () => {
   beforeEach(() => {
     // Create mock config manager
     mockConfigManager = {
-      loadConfig: () =>
-        Promise.resolve({
-          localesPath: "/path/to/locales",
-          defaultLocale: "en",
-          supportedLocales: ["en", "es"],
-          functionNames: ["t", "translate"],
-          fileNamingPattern: "locale.json",
-          enabled: true,
-        }),
+      isEnabled: () => Promise.resolve(true),
       getAvailableLocales: () =>
         Promise.resolve([
           { locale: "en", path: "/path/to/locales/en.json", exists: true },
