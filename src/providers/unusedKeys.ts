@@ -1,11 +1,23 @@
-import * as vscode from "vscode";
-import * as path from "path";
 import { parseTree, ParseError, Node as JsonNode } from "jsonc-parser";
 import { ConfigManager } from "../utils/configManager";
+import {
+  Range,
+  DiagnosticCollection,
+  Diagnostic,
+  DiagnosticSeverity,
+  DiagnosticTag,
+  languages,
+  workspace,
+  TextDocument,
+  ExtensionContext,
+  Uri,
+  RelativePattern,
+} from "vscode";
+import { extname, normalize, sep } from "path";
 
 type KeyWithRange = {
   keyPath: string;
-  range: vscode.Range;
+  range: Range;
   isLeaf: boolean;
 };
 
@@ -14,18 +26,18 @@ type KeyWithRange = {
  * Unused keys are tagged as Unnecessary so they appear dimmed in the editor.
  */
 export class I18nUnusedKeysDiagnostics {
-  private diagnostics: vscode.DiagnosticCollection;
+  private diagnostics: DiagnosticCollection;
   private usedKeysCache: Set<string> = new Set();
   private recomputeTimer: ReturnType<typeof setTimeout> | null = null;
   private isComputing = false;
 
   constructor(private readonly configManager: ConfigManager) {
-    this.diagnostics = vscode.languages.createDiagnosticCollection(
+    this.diagnostics = languages.createDiagnosticCollection(
       "i18n-boost-unused-keys"
     );
   }
 
-  register(context: vscode.ExtensionContext) {
+  register(context: ExtensionContext) {
     context.subscriptions.push(this.diagnostics);
 
     // Initial population (schedule, don't block activation)
@@ -33,34 +45,32 @@ export class I18nUnusedKeysDiagnostics {
 
     // Recompute when code files are saved (not on each keystroke)
     context.subscriptions.push(
-      vscode.workspace.onDidSaveTextDocument((doc) => {
+      workspace.onDidSaveTextDocument((doc) => {
         if (this.isCodeFile(doc)) this.scheduleRecompute();
       })
     );
 
     // Refresh diagnostics when a locale file opens or changes
     context.subscriptions.push(
-      vscode.workspace.onDidOpenTextDocument((doc) => this.refreshFor(doc))
+      workspace.onDidOpenTextDocument((doc) => this.refreshFor(doc))
     );
     context.subscriptions.push(
-      vscode.workspace.onDidChangeTextDocument((e) =>
-        this.refreshFor(e.document)
-      )
+      workspace.onDidChangeTextDocument((e) => this.refreshFor(e.document))
     );
     context.subscriptions.push(
-      vscode.workspace.onDidSaveTextDocument((doc) => this.refreshFor(doc))
+      workspace.onDidSaveTextDocument((doc) => this.refreshFor(doc))
     );
 
     // Config changes
     context.subscriptions.push(
-      vscode.workspace.onDidChangeConfiguration(() => this.scheduleRecompute())
+      workspace.onDidChangeConfiguration(() => this.scheduleRecompute())
     );
 
     // File system watcher for locale directory
     (async () => {
       const localesGlob = await this.getLocalesGlob();
       if (!localesGlob) return;
-      const watcher = vscode.workspace.createFileSystemWatcher(localesGlob);
+      const watcher = workspace.createFileSystemWatcher(localesGlob);
       watcher.onDidCreate((uri) => this.refreshOpenDocForUri(uri));
       watcher.onDidChange((uri) => this.refreshOpenDocForUri(uri));
       watcher.onDidDelete((uri) => this.diagnostics.delete(uri));
@@ -68,13 +78,13 @@ export class I18nUnusedKeysDiagnostics {
     })();
 
     // Refresh all currently open locale documents on activation
-    for (const doc of vscode.workspace.textDocuments) {
+    for (const doc of workspace.textDocuments) {
       this.refreshFor(doc);
     }
   }
 
-  private isCodeFile(doc: vscode.TextDocument): boolean {
-    const ext = path.extname(doc.uri.fsPath).toLowerCase();
+  private isCodeFile(doc: TextDocument): boolean {
+    const ext = extname(doc.uri.fsPath).toLowerCase();
     return [".ts", ".tsx", ".js", ".jsx", ".vue", ".svelte", ".html"].includes(
       ext
     );
@@ -92,21 +102,21 @@ export class I18nUnusedKeysDiagnostics {
     // Clear the timer to prevent race conditions
     this.recomputeTimer = null;
     await this.computeUsedKeys();
-    for (const doc of vscode.workspace.textDocuments) {
+    for (const doc of workspace.textDocuments) {
       this.refreshFor(doc);
     }
   }
 
-  private async refreshOpenDocForUri(uri: vscode.Uri) {
-    const doc = vscode.workspace.textDocuments.find(
+  private async refreshOpenDocForUri(uri: Uri) {
+    const doc = workspace.textDocuments.find(
       (d) => d.uri.toString() === uri.toString()
     );
     if (doc) this.refreshFor(doc);
   }
 
-  private async refreshFor(document: vscode.TextDocument) {
-    const config = await this.configManager.loadConfig();
-    if (!config || !config.enabled) {
+  private async refreshFor(document: TextDocument) {
+    const enabled = await this.configManager.isEnabled();
+    if (!enabled) {
       this.diagnostics.clear();
       return;
     }
@@ -115,56 +125,53 @@ export class I18nUnusedKeysDiagnostics {
       return;
     }
 
-    const diagnostics: vscode.Diagnostic[] = [];
+    const diagnostics: Diagnostic[] = [];
     const keys = this.collectKeysWithRanges(document);
 
     for (const k of keys) {
       if (!k.isLeaf) continue;
       if (this.usedKeysCache.has(k.keyPath)) continue;
 
-      const diag = new vscode.Diagnostic(
+      const diag = new Diagnostic(
         k.range,
         `Unused i18n key: ${k.keyPath}`,
-        vscode.DiagnosticSeverity.Hint
+        DiagnosticSeverity.Hint
       );
-      diag.tags = [vscode.DiagnosticTag.Unnecessary];
+      diag.tags = [DiagnosticTag.Unnecessary];
       diagnostics.push(diag);
     }
 
     this.diagnostics.set(document.uri, diagnostics);
   }
 
-  private async isLocaleDocument(
-    document: vscode.TextDocument
-  ): Promise<boolean> {
+  private async isLocaleDocument(document: TextDocument): Promise<boolean> {
     if (document.languageId !== "json" && document.languageId !== "jsonc") {
       return false;
     }
-    const localesPath = this.configManager.getLocalesPath();
+    const localesPath = await this.configManager.getLocalesPath();
     if (!localesPath) return false;
 
     const docFsPath = document.uri.fsPath;
-    const normalizedDoc = path.normalize(docFsPath);
-    const normalizedLocales = path.normalize(localesPath) + path.sep;
+    const normalizedDoc = normalize(docFsPath);
+    const normalizedLocales = normalize(localesPath) + sep;
     return normalizedDoc.startsWith(normalizedLocales);
   }
 
   private async getLocalesGlob(): Promise<string | null> {
-    const config = await this.configManager.loadConfig();
-    if (!config) return null;
-    const base = this.configManager.getLocalesPath();
-    if (!base) return null;
-    const relBase = this.toWorkspaceRelativeGlob(base);
+    const localesPath = await this.configManager.getLocalesPath();
+    if (!localesPath) return null;
+    const fileNamingPattern = await this.configManager.getFileNamingPattern();
+    const relBase = this.toWorkspaceRelativeGlob(localesPath);
 
-    switch (config.fileNamingPattern) {
+    switch (fileNamingPattern) {
       case "locale.json":
-        return new vscode.RelativePattern(relBase, "*.json").pattern;
+        return new RelativePattern(relBase, "*.json").pattern;
       case "locale/common.json":
-        return new vscode.RelativePattern(relBase, "*/common.json").pattern;
+        return new RelativePattern(relBase, "*/common.json").pattern;
       case "locale/index.json":
-        return new vscode.RelativePattern(relBase, "*/index.json").pattern;
+        return new RelativePattern(relBase, "*/index.json").pattern;
       default:
-        return new vscode.RelativePattern(relBase, "**/*.json").pattern;
+        return new RelativePattern(relBase, "**/*.json").pattern;
     }
   }
 
@@ -172,7 +179,7 @@ export class I18nUnusedKeysDiagnostics {
     return absPath;
   }
 
-  private collectKeysWithRanges(document: vscode.TextDocument): KeyWithRange[] {
+  private collectKeysWithRanges(document: TextDocument): KeyWithRange[] {
     const text = document.getText();
     const errors: ParseError[] = [];
     const root = parseTree(text, errors, { allowTrailingComma: true });
@@ -213,14 +220,11 @@ export class I18nUnusedKeysDiagnostics {
     return results;
   }
 
-  private keyNameRange(
-    document: vscode.TextDocument,
-    keyNode: JsonNode
-  ): vscode.Range {
+  private keyNameRange(document: TextDocument, keyNode: JsonNode): Range {
     // keyNode includes surrounding quotes. Highlight only the name inside quotes.
     const start = document.positionAt(keyNode.offset + 1);
     const end = document.positionAt(keyNode.offset + keyNode.length - 1);
-    return new vscode.Range(start, end);
+    return new Range(start, end);
   }
 
   private extractStringFromQuoted(
@@ -239,17 +243,17 @@ export class I18nUnusedKeysDiagnostics {
     if (this.isComputing) return;
     this.isComputing = true;
     try {
-      const config = await this.configManager.loadConfig();
-      if (!config || !config.enabled) {
+      const enabled = await this.configManager.isEnabled();
+      if (!enabled) {
         this.usedKeysCache = new Set();
         return;
       }
 
-      const functionNames = config.functionNames || ["t", "translate"];
+      const functionNames = await this.configManager.getFunctionNames();
       const includeGlob = "**/*.{ts,tsx,js,jsx,vue,svelte,html}";
       const excludeGlob = "**/node_modules/**";
 
-      const files = await vscode.workspace.findFiles(includeGlob, excludeGlob);
+      const files = await workspace.findFiles(includeGlob, excludeGlob);
 
       const used: Set<string> = new Set();
       const relCallPattern = new RegExp(
@@ -262,7 +266,7 @@ export class I18nUnusedKeysDiagnostics {
 
       for (const uri of files) {
         try {
-          const bytes = await vscode.workspace.fs.readFile(uri);
+          const bytes = await workspace.fs.readFile(uri);
           const text = Buffer.from(bytes).toString("utf8");
 
           const baseKeys = new Set<string>();
