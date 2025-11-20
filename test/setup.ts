@@ -49,6 +49,22 @@ const mockVscode: any = {
       this.pattern = `${base}/${pattern}`;
     }
   },
+  CompletionItemKind: {
+    Module: 1,
+    Value: 2,
+  },
+  CompletionItem: class MockCompletionItem {
+    constructor(public label: string, public kind: any) {}
+    insertText?: any;
+    documentation?: any;
+    command?: any;
+  },
+  SnippetString: class MockSnippetString {
+    constructor(public value: string) {}
+  },
+  MarkdownString: class MockMarkdownString {
+    constructor(public value: string) {}
+  },
   commands: {
     executeCommand: () => Promise.resolve(),
     registerCommand: () => ({ dispose: () => {} }),

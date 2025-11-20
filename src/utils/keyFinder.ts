@@ -1,4 +1,4 @@
-import * as fs from "fs";
+import { readFileSync } from "fs";
 import { parseTree, ParseError } from "jsonc-parser";
 
 export interface KeyPosition {
@@ -15,7 +15,7 @@ export async function findKeyInJsonFile(
   filePath: string
 ): Promise<KeyPosition | null> {
   try {
-    const content = fs.readFileSync(filePath, "utf8");
+    const content = readFileSync(filePath, "utf8");
     return findKeyPosition(key, content);
   } catch (error) {
     // Error reading file
