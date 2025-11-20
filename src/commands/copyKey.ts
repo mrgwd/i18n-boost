@@ -1,20 +1,20 @@
-import * as vscode from "vscode";
 import { getKeyPathAtPosition } from "../utils/jsonWalker";
+import { commands, Disposable, env, window } from "vscode";
 
-export function registerCopyFullKeyCommand(): vscode.Disposable {
-  const disposable = vscode.commands.registerCommand(
+export function registerCopyFullKeyCommand(): Disposable {
+  const disposable = commands.registerCommand(
     "i18nBoost.copyFullKey",
     async () => {
-      const editor = vscode.window.activeTextEditor;
+      const editor = window.activeTextEditor;
       if (!editor) {
-        vscode.window.showInformationMessage("No active editor");
+        window.showInformationMessage("No active editor");
         return;
       }
 
       const doc = editor.document;
       // Only JSON files for this feature
       if (doc.languageId !== "json" && doc.languageId !== "jsonc") {
-        vscode.window.showInformationMessage(
+        window.showInformationMessage(
           "Copy translation key: open a JSON file and place the cursor on a value or key"
         );
         return;
@@ -27,18 +27,16 @@ export function registerCopyFullKeyCommand(): vscode.Disposable {
           doc.offsetAt(position)
         );
         if (!keyPath) {
-          vscode.window.showWarningMessage(
+          window.showWarningMessage(
             "Could not determine translation key at cursor"
           );
           return;
         }
 
-        await vscode.env.clipboard.writeText(keyPath);
-        vscode.window.showInformationMessage(
-          `Copied translation key: ${keyPath}`
-        );
+        await env.clipboard.writeText(keyPath);
+        window.showInformationMessage(`Copied translation key: ${keyPath}`);
       } catch (err) {
-        vscode.window.showErrorMessage("i18n-boost: Failed to copy key");
+        window.showErrorMessage("i18n-boost: Failed to copy key");
       }
     }
   );
