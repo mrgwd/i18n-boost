@@ -1,14 +1,23 @@
-import * as vscode from "vscode";
-import * as fs from "fs";
-import * as jsonc from "jsonc-parser";
+import {
+  CompletionItemProvider,
+  CompletionItem,
+  CompletionItemKind,
+  Position,
+  TextDocument,
+  workspace,
+  SnippetString,
+  MarkdownString,
+} from "vscode";
 import { ConfigManager } from "../utils/configManager";
 import { findBaseKey } from "../utils/findBaseKey";
+import { existsSync, readFileSync } from "fs";
+import { parse } from "jsonc-parser";
 
 /**
  * A completion provider for i18n keys that dynamically loads translations.
  * It suggests keys based on the user's input within configured function calls.
  */
-export class I18nCompletionProvider implements vscode.CompletionItemProvider {
+export class I18nCompletionProvider implements CompletionItemProvider {
   private translations: Record<string, any> = {};
 
   constructor(
@@ -17,7 +26,7 @@ export class I18nCompletionProvider implements vscode.CompletionItemProvider {
   ) {
     this.loadTranslations();
     // Reload translations when the config changes
-    vscode.workspace.onDidChangeConfiguration(() => this.loadTranslations());
+    workspace.onDidChangeConfiguration(() => this.loadTranslations());
 
     // Listen for config file changes
     if (onConfigChange) {
@@ -27,14 +36,11 @@ export class I18nCompletionProvider implements vscode.CompletionItemProvider {
 
     // Also reload when the default locale file is saved/changed
     (async () => {
-      const config = await this.configManager.loadConfig();
-      if (!config) return;
-      const defaultLocaleFile = this.configManager.getLocaleFilePath(
-        config.defaultLocale,
-        config
+      const defaultLocale = await this.configManager.getDefaultLocale();
+      const defaultLocaleFile = await this.configManager.getLocaleFilePath(
+        defaultLocale
       );
-      const watcher =
-        vscode.workspace.createFileSystemWatcher(defaultLocaleFile);
+      const watcher = workspace.createFileSystemWatcher(defaultLocaleFile);
       watcher.onDidChange(() => this.loadTranslations());
       watcher.onDidCreate(() => this.loadTranslations());
       watcher.onDidDelete(() => (this.translations = {}));
@@ -52,20 +58,20 @@ export class I18nCompletionProvider implements vscode.CompletionItemProvider {
    * Loads and parses the translation file for the default locale.
    */
   private async loadTranslations() {
-    const config = await this.configManager.loadConfig();
-    if (!config || !config.enabled) {
+    const enabled = await this.configManager.isEnabled();
+    if (!enabled) {
       this.translations = {};
       return;
     }
 
     try {
-      const defaultLocaleFile = this.configManager.getLocaleFilePath(
-        config.defaultLocale,
-        config
+      const defaultLocale = await this.configManager.getDefaultLocale();
+      const defaultLocaleFile = await this.configManager.getLocaleFilePath(
+        defaultLocale
       );
-      if (fs.existsSync(defaultLocaleFile)) {
-        const content = fs.readFileSync(defaultLocaleFile, "utf-8");
-        this.translations = jsonc.parse(content);
+      if (existsSync(defaultLocaleFile)) {
+        const content = readFileSync(defaultLocaleFile, "utf-8");
+        this.translations = parse(content);
       } else {
         this.translations = {};
       }
@@ -82,11 +88,11 @@ export class I18nCompletionProvider implements vscode.CompletionItemProvider {
    * @returns A list of completion items or undefined.
    */
   public async provideCompletionItems(
-    document: vscode.TextDocument,
-    position: vscode.Position
-  ): Promise<vscode.CompletionItem[]> {
-    const config = await this.configManager.loadConfig();
-    if (!config || !config.enabled) {
+    document: TextDocument,
+    position: Position
+  ): Promise<CompletionItem[]> {
+    const enabled = await this.configManager.isEnabled();
+    if (!enabled) {
       return [];
     }
 
@@ -95,7 +101,8 @@ export class I18nCompletionProvider implements vscode.CompletionItemProvider {
       .text.substring(0, position.character);
 
     // Build a dynamic regex from the function names in the config
-    const functionNamesPattern = config.functionNames
+    const functionNames = await this.configManager.getFunctionNames();
+    const functionNamesPattern = functionNames
       .map((name) => name.replace(".", "\\."))
       .join("|");
     const regex = new RegExp(`(?:${functionNamesPattern})\\(['"\`]([^'"\`]*)$`);
@@ -150,23 +157,21 @@ export class I18nCompletionProvider implements vscode.CompletionItemProvider {
       return [];
     }
 
-    const suggestions: vscode.CompletionItem[] = [];
+    const suggestions: CompletionItem[] = [];
     const keys = Object.keys(currentObject);
     const filteredKeys = keys.filter((key) => key.startsWith(lastPart));
     for (const key of filteredKeys) {
       const value = currentObject[key];
       const isObject = typeof value === "object" && value !== null;
 
-      const item = new vscode.CompletionItem(
+      const item = new CompletionItem(
         key,
-        isObject
-          ? vscode.CompletionItemKind.Module
-          : vscode.CompletionItemKind.Value
+        isObject ? CompletionItemKind.Module : CompletionItemKind.Value
       );
 
       if (isObject) {
-        item.insertText = new vscode.SnippetString(key + ".");
-        item.documentation = new vscode.MarkdownString(
+        item.insertText = new SnippetString(key + ".");
+        item.documentation = new MarkdownString(
           "This key has nested translations."
         );
         item.command = {
