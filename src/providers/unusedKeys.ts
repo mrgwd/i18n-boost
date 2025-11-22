@@ -1,19 +1,19 @@
 import { parseTree, ParseError, Node as JsonNode } from "jsonc-parser";
 import { ConfigManager } from "../utils/configManager";
 import {
-  Range,
-  DiagnosticCollection,
   Diagnostic,
+  DiagnosticCollection,
   DiagnosticSeverity,
   DiagnosticTag,
-  languages,
-  workspace,
-  TextDocument,
   ExtensionContext,
-  Uri,
+  languages,
+  Range,
   RelativePattern,
+  TextDocument,
+  Uri,
+  workspace,
 } from "vscode";
-import { extname, normalize, sep } from "path";
+import { extname, join, normalize, sep } from "path";
 
 type KeyWithRange = {
   keyPath: string;
@@ -151,9 +151,14 @@ export class I18nUnusedKeysDiagnostics {
     const localesPath = await this.configManager.getLocalesPath();
     if (!localesPath) return false;
 
+    const wsFolders = workspace.workspaceFolders;
+    if (!wsFolders || wsFolders.length === 0) return false;
+    const workspaceRoot = wsFolders[0].uri.fsPath;
+    const fullLocalesPath = join(workspaceRoot, localesPath);
+
     const docFsPath = document.uri.fsPath;
     const normalizedDoc = normalize(docFsPath);
-    const normalizedLocales = normalize(localesPath) + sep;
+    const normalizedLocales = normalize(fullLocalesPath) + sep;
     return normalizedDoc.startsWith(normalizedLocales);
   }
 
