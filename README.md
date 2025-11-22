@@ -41,6 +41,8 @@ Get real-time suggestions for translation keys while typing inside your translat
 
 When hovering over a translation key in your code, you will see a list of available locales.
 
+![autocomplete](https://raw.githubusercontent.com/mrgwd/i18n-boost/main/assets/easy-switch.gif)
+
 **How it works:**
 
 - Hover over a translation key in your code
@@ -119,7 +121,14 @@ I18n Boost uses VS Code's built-in settings system for configuration. You can co
 {
   "i18nBoost.localesPath": "./translations",
   "i18nBoost.defaultLocale": "en",
-  "i18nBoost.functionNames": ["i18n.t", "t"],
+  "i18nBoost.functionNames": [
+    "t",
+    "translate",
+    "$t",
+    "i18n.t",
+    "t.raw",
+    "t.rich"
+  ],
   "i18nBoost.fileNamingPattern": "locale.json",
   "i18nBoost.enabled": true
 }
