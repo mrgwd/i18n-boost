@@ -1,187 +1,150 @@
-import * as vscode from "vscode";
-import * as path from "path";
-import * as fs from "fs";
-import { I18nBoostConfig } from "../types";
+import {
+  discoverSupportedLocales,
+  getLocaleFilePath,
+  LocaleInfo,
+} from "./localeDiscovery";
+import { workspace, Disposable } from "vscode";
 
-const CONFIG_FILE_NAME = "i18nBoost.config.ts" as const;
+export interface I18nBoostSettings {
+  localesPath: string;
+  defaultLocale: string;
+  functionNames: string[];
+  fileNamingPattern: "locale.json" | "locale/common.json" | "locale/index.json";
+  enabled: boolean;
+}
 
 export class ConfigManager {
-  private config: I18nBoostConfig | null = null;
-  private configPath: string | null = null;
+  private settings: I18nBoostSettings | null = null;
+  private supportedLocales: LocaleInfo[] | null = null;
 
-  async hasConfig(): Promise<boolean> {
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (!workspaceFolders) return false;
+  /**
+   * Load settings from VS Code configuration
+   */
+  async loadSettings(): Promise<I18nBoostSettings> {
+    if (this.settings) return this.settings;
 
-    for (const folder of workspaceFolders) {
-      const configPath = path.join(folder.uri.fsPath, CONFIG_FILE_NAME);
-      if (fs.existsSync(configPath)) {
-        this.configPath = configPath;
-        return true;
-      }
-    }
-    return false;
-  }
+    const config = workspace.getConfiguration("i18nBoost");
 
-  async loadConfig(): Promise<I18nBoostConfig | null> {
-    if (this.config) return this.config;
-
-    if (!(await this.hasConfig()) || !this.configPath) {
-      return null;
-    }
-
-    try {
-      const configContent = fs.readFileSync(this.configPath, "utf8");
-      this.config = this.parseTypeScriptConfig(configContent);
-      return this.config;
-    } catch (error) {
-      vscode.window.showErrorMessage(`Failed to load config: ${error}`);
-      return null;
-    }
-  }
-
-  private parseTypeScriptConfig(content: string): I18nBoostConfig {
-    // Remove comments
-    const withoutComments = content
-      .replace(/\/\/.*$/gm, "")
-      .replace(/\/\*[\s\S]*?\*\//g, "");
-
-    // Extract the export const with type annotation
-    const exportMatch = withoutComments.match(
-      /export\s+const\s+i18nBoostConfig\s*:\s*I18nBoostConfig\s*=\s*({[\s\S]*?});?\s*$/
-    );
-    if (!exportMatch) {
-      throw new Error(
-        "Config file must have an export const with I18nBoostConfig type annotation"
-      );
-    }
-
-    const configObjectStr = exportMatch[1];
-    const config: Record<string, any> = {};
-
-    // Extract string properties
-    const stringProps = ["localesPath", "defaultLocale", "fileNamingPattern"];
-    for (const prop of stringProps) {
-      const match = configObjectStr.match(
-        new RegExp(`${prop}\\s*:\\s*['"\`]([^'"\`]+)['"\`]`)
-      );
-      if (match) {
-        config[prop] = match[1];
-      }
-    }
-
-    // Extract boolean properties
-    const enabledMatch = configObjectStr.match(/enabled\s*:\s*(true|false)/);
-    if (enabledMatch) {
-      config.enabled = enabledMatch[1] === "true";
-    }
-
-    // Extract arrays
-    const supportedLocalesMatch = configObjectStr.match(
-      /supportedLocales\s*:\s*\[([\s\S]*?)\]/
-    );
-    if (supportedLocalesMatch) {
-      config.supportedLocales = this.parseStringArray(supportedLocalesMatch[1]);
-    }
-
-    const functionNamesMatch = configObjectStr.match(
-      /functionNames\s*:\s*\[([\s\S]*?)\]/
-    );
-    if (functionNamesMatch) {
-      config.functionNames = this.parseStringArray(functionNamesMatch[1]);
-    }
-
-    // Set defaults for missing values
-    return {
-      localesPath: config.localesPath || "src/i18n",
-      defaultLocale: config.defaultLocale || "en",
-      supportedLocales: config.supportedLocales || ["en"],
-      functionNames: config.functionNames || ["t", "translate"],
-      fileNamingPattern: config.fileNamingPattern || "locale.json",
-      enabled: config.enabled !== false,
+    this.settings = {
+      localesPath: config.get<string>("localesPath") || "src/i18n",
+      defaultLocale: config.get<string>("defaultLocale") || "en",
+      functionNames: config.get<string[]>("functionNames") || [
+        "t",
+        "translate",
+        "$t",
+        "i18n.t",
+        "t.raw",
+        "t.rich",
+      ],
+      fileNamingPattern:
+        config.get<"locale.json" | "locale/common.json" | "locale/index.json">(
+          "fileNamingPattern"
+        ) || "locale.json",
+      enabled: config.get<boolean>("enabled") !== false,
     };
-  }
 
-  private parseStringArray(arrayContent: string): string[] {
-    const items: string[] = [];
-    const matches = arrayContent.match(/['"\`]([^'"\`]+)['"\`]/g);
-    if (matches) {
-      for (const match of matches) {
-        const cleaned = match.replace(/['"\`]/g, "");
-        if (cleaned.trim()) {
-          items.push(cleaned.trim());
-        }
-      }
-    }
-    return items;
-  }
-
-  getWorkspacePath(): string | null {
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    return workspaceFolders ? workspaceFolders[0].uri.fsPath : null;
-  }
-
-  getLocalesPath(): string | null {
-    const workspacePath = this.getWorkspacePath();
-    if (!workspacePath || !this.config) return null;
-
-    return path.join(workspacePath, this.config.localesPath);
+    return this.settings;
   }
 
   /**
-   * Get available locale files based on configuration
+   * Get current settings (loads if not already loaded)
    */
-  async getAvailableLocales(): Promise<
-    { locale: string; path: string; exists: boolean }[]
+  async getSettings(): Promise<I18nBoostSettings> {
+    return await this.loadSettings();
+  }
+
+  /**
+   * Check if the extension is enabled
+   */
+  async isEnabled(): Promise<boolean> {
+    const settings = await this.getSettings();
+    return settings.enabled;
+  }
+
+  /**
+   * Get the locales path
+   */
+  async getLocalesPath(): Promise<string> {
+    const settings = await this.getSettings();
+    return settings.localesPath;
+  }
+
+  /**
+   * Get the default locale
+   */
+  async getDefaultLocale(): Promise<string> {
+    const settings = await this.getSettings();
+    return settings.defaultLocale;
+  }
+
+  /**
+   * Get function names for translation detection
+   */
+  async getFunctionNames(): Promise<string[]> {
+    const settings = await this.getSettings();
+    return settings.functionNames;
+  }
+
+  /**
+   * Get file naming pattern
+   */
+  async getFileNamingPattern(): Promise<
+    "locale.json" | "locale/common.json" | "locale/index.json"
   > {
-    const config = await this.loadConfig();
-    if (!config) return [];
+    const settings = await this.getSettings();
+    return settings.fileNamingPattern;
+  }
 
-    const localesPath = this.getLocalesPath();
-    if (!localesPath || !fs.existsSync(localesPath)) return [];
+  /**
+   * Dynamically discover and cache supported locales
+   */
+  async getSupportedLocales(): Promise<LocaleInfo[]> {
+    if (this.supportedLocales) return this.supportedLocales;
 
-    const locales: { locale: string; path: string; exists: boolean }[] = [];
+    const settings = await this.getSettings();
+    this.supportedLocales = await discoverSupportedLocales(
+      settings.localesPath,
+      settings.fileNamingPattern
+    );
 
-    for (const locale of config.supportedLocales) {
-      const filePath = this.getLocaleFilePath(locale, config);
-      locales.push({
-        locale: locale,
-        path: filePath,
-        exists: fs.existsSync(filePath),
-      });
-    }
+    return this.supportedLocales;
+  }
 
-    return locales;
+  /**
+   * Get available locales (same as getSupportedLocales for backward compatibility)
+   */
+  async getAvailableLocales(): Promise<LocaleInfo[]> {
+    return await this.getSupportedLocales();
   }
 
   /**
    * Get file path for a specific locale
    */
-  getLocaleFilePath(locale: string, config?: I18nBoostConfig): string {
-    const activeConfig = config || this.config;
-    if (!activeConfig) {
-      throw new Error("No configuration loaded");
-    }
-
-    const localesPath = this.getLocalesPath()!;
-
-    switch (activeConfig.fileNamingPattern) {
-      case "locale.json":
-        return path.join(localesPath, `${locale}.json`);
-      case "locale/common.json":
-        return path.join(localesPath, locale, "common.json");
-      case "locale/index.json":
-        return path.join(localesPath, locale, "index.json");
-      default:
-        return path.join(localesPath, `${locale}.json`);
-    }
+  async getLocaleFilePath(locale: string): Promise<string> {
+    const settings = await this.getSettings();
+    return getLocaleFilePath(
+      locale,
+      settings.localesPath,
+      settings.fileNamingPattern
+    );
   }
 
   /**
-   * Reset cached config (useful when config file is modified)
+   * Reset cached settings and locales (useful when settings change)
    */
   resetCache(): void {
-    this.config = null;
-    this.configPath = null;
+    this.settings = null;
+    this.supportedLocales = null;
+  }
+
+  /**
+   * Listen for configuration changes and reset cache
+   */
+  setupConfigurationWatcher(): Disposable {
+    return workspace.onDidChangeConfiguration((event) => {
+      if (event.affectsConfiguration("i18nBoost")) {
+        this.resetCache();
+      }
+    });
   }
 }
