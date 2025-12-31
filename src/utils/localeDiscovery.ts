@@ -14,7 +14,7 @@ export interface LocaleInfo {
  */
 export async function discoverSupportedLocales(
   localesPath: string,
-  fileNamingPattern: "locale.json" | "locale/common.json" | "locale/index.json"
+  fileNamingPattern: "locale.json" | "locale/**/*.json"
 ): Promise<LocaleInfo[]> {
   const workspaceFolders = workspace.workspaceFolders;
   if (!workspaceFolders) {
@@ -31,51 +31,48 @@ export async function discoverSupportedLocales(
   }
 
   try {
-    switch (fileNamingPattern) {
-      case "locale.json":
-        // Pattern: en.json, fr.json, de.json, etc.
-        {
-          const files = readdirSync(fullLocalesPath);
-          for (const file of files) {
-            if (file.endsWith(".json")) {
-              const locale = file.replace(".json", "");
-              const filePath = join(fullLocalesPath, file);
-              locales.push({
-                locale,
-                path: filePath,
-                exists: existsSync(filePath),
-              });
-            }
-          }
-        }
-        break;
-
-      case "locale/common.json":
-      case "locale/index.json":
-        // Pattern: en/common.json, fr/common.json, etc.
-        // or: en/index.json, fr/index.json, etc.
-        {
-          const subdirs = readdirSync(fullLocalesPath, {
-            withFileTypes: true,
+    if (fileNamingPattern === "locale.json") {
+      // Pattern: en.json, fr.json, de.json, etc.
+      const files = readdirSync(fullLocalesPath);
+      for (const file of files) {
+        if (file.endsWith(".json")) {
+          const locale = file.replace(".json", "");
+          const filePath = join(fullLocalesPath, file);
+          locales.push({
+            locale,
+            path: filePath,
+            exists: existsSync(filePath),
           });
-          const fileName =
-            fileNamingPattern === "locale/common.json"
-              ? "common.json"
-              : "index.json";
-
-          for (const subdir of subdirs) {
-            if (subdir.isDirectory()) {
-              const locale = subdir.name;
-              const filePath = join(fullLocalesPath, locale, fileName);
-              locales.push({
-                locale,
-                path: filePath,
-                exists: existsSync(filePath),
-              });
-            }
-          }
         }
-        break;
+      }
+    } else {
+      // Pattern: locale/**/*.json (Directory based)
+      // Covers: en/common.json, en/auth.json, en/auth/login.json
+      const subdirs = readdirSync(fullLocalesPath, {
+        withFileTypes: true,
+      });
+
+      for (const subdir of subdirs) {
+        if (subdir.isDirectory()) {
+          const locale = subdir.name;
+          const filePath = join(fullLocalesPath, locale);
+
+          // Check if directory has any json files or subdirectories with json files
+          let exists = existsSync(filePath);
+          if (exists) {
+            const dirContent = readdirSync(filePath);
+            exists = dirContent.some(
+              (f) => f.endsWith(".json") || !f.includes(".")
+            );
+          }
+
+          locales.push({
+            locale,
+            path: filePath,
+            exists,
+          });
+        }
+      }
     }
   } catch (error) {
     // Silently handle errors - return partial results if any were discovered
@@ -90,7 +87,7 @@ export async function discoverSupportedLocales(
 export function getLocaleFilePath(
   locale: string,
   localesPath: string,
-  fileNamingPattern: "locale.json" | "locale/common.json" | "locale/index.json"
+  fileNamingPattern: "locale.json" | "locale/**/*.json"
 ): string {
   const workspaceFolders = workspace.workspaceFolders;
   if (!workspaceFolders) {
@@ -100,30 +97,46 @@ export function getLocaleFilePath(
   const workspaceRoot = workspaceFolders[0].uri.fsPath;
   const fullLocalesPath = join(workspaceRoot, localesPath);
 
-  switch (fileNamingPattern) {
-    case "locale.json":
-      return join(fullLocalesPath, `${locale}.json`);
-    case "locale/common.json":
-      return join(fullLocalesPath, locale, "common.json");
-    case "locale/index.json":
-      return join(fullLocalesPath, locale, "index.json");
-    default:
-      return join(fullLocalesPath, `${locale}.json`);
+  if (fileNamingPattern === "locale.json") {
+    return join(fullLocalesPath, `${locale}.json`);
+  } else {
+    // locale/**/*.json
+    return join(fullLocalesPath, locale);
   }
 }
-
 /**
- * Check if a specific locale file exists
+ * Detect the file naming pattern used in the locales directory
  */
-export function localeFileExists(
-  locale: string,
-  localesPath: string,
-  fileNamingPattern: "locale.json" | "locale/common.json" | "locale/index.json"
-): boolean {
-  try {
-    const filePath = getLocaleFilePath(locale, localesPath, fileNamingPattern);
-    return existsSync(filePath);
-  } catch {
-    return false;
+export function detectFileNamingPattern(
+  localesPath: string
+): "locale.json" | "locale/**/*.json" {
+  const workspaceFolders = workspace.workspaceFolders;
+  if (!workspaceFolders) {
+    return "locale.json"; // Default fallback
   }
+
+  const workspaceRoot = workspaceFolders[0].uri.fsPath;
+  const fullLocalesPath = join(workspaceRoot, localesPath);
+
+  if (!existsSync(fullLocalesPath)) {
+    return "locale.json";
+  }
+
+  const items = readdirSync(fullLocalesPath, { withFileTypes: true });
+
+  // Check for single file pattern (en.json, ar.json)
+  const hasJsonFiles = items.some(
+    (item) => item.isFile() && item.name.endsWith(".json")
+  );
+  if (hasJsonFiles) {
+    return "locale.json";
+  }
+
+  // If we have directories, default to directory mode
+  const hasDirs = items.some((item) => item.isDirectory());
+  if (hasDirs) {
+    return "locale/**/*.json";
+  }
+
+  return "locale.json";
 }
