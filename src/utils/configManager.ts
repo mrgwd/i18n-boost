@@ -1,6 +1,7 @@
 import {
   discoverSupportedLocales,
   getLocaleFilePath,
+  detectFileNamingPattern,
   LocaleInfo,
 } from "./localeDiscovery";
 import { workspace, Disposable } from "vscode";
@@ -9,7 +10,7 @@ export interface I18nBoostSettings {
   localesPath: string;
   defaultLocale: string;
   functionNames: string[];
-  fileNamingPattern: "locale.json" | "locale/common.json" | "locale/index.json";
+  fileNamingPattern: "locale.json" | "locale/**/*.json" | "auto";
   enabled: boolean;
 }
 
@@ -37,11 +38,17 @@ export class ConfigManager {
         "t.rich",
       ],
       fileNamingPattern:
-        config.get<"locale.json" | "locale/common.json" | "locale/index.json">(
+        config.get<"locale.json" | "locale/**/*.json" | "auto">(
           "fileNamingPattern"
-        ) || "locale.json",
+        ) || "auto",
       enabled: config.get<boolean>("enabled") !== false,
     };
+
+    if (this.settings.fileNamingPattern === "auto") {
+      this.settings.fileNamingPattern = detectFileNamingPattern(
+        this.settings.localesPath
+      );
+    }
 
     return this.settings;
   }
@@ -89,7 +96,7 @@ export class ConfigManager {
    * Get file naming pattern
    */
   async getFileNamingPattern(): Promise<
-    "locale.json" | "locale/common.json" | "locale/index.json"
+    "locale.json" | "locale/**/*.json" | "auto"
   > {
     const settings = await this.getSettings();
     return settings.fileNamingPattern;
@@ -104,7 +111,7 @@ export class ConfigManager {
     const settings = await this.getSettings();
     this.supportedLocales = await discoverSupportedLocales(
       settings.localesPath,
-      settings.fileNamingPattern
+      settings.fileNamingPattern as any
     );
 
     return this.supportedLocales;
@@ -125,7 +132,7 @@ export class ConfigManager {
     return getLocaleFilePath(
       locale,
       settings.localesPath,
-      settings.fileNamingPattern
+      settings.fileNamingPattern as any
     );
   }
 
