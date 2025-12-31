@@ -1,6 +1,6 @@
 import { existsSync } from "fs";
 import { ConfigManager } from "../utils/configManager";
-import { findKeyInJsonFile } from "../utils/keyFinder";
+import { findKeyInLocale } from "../utils/keyFinder";
 import { getTranslationKeyAtPosition } from "../utils/translationKeyAtPosition";
 import {
   DefinitionProvider,
@@ -37,29 +37,29 @@ export class I18nNavigationProvider implements DefinitionProvider {
 
     // Navigate to default locale
     const defaultLocale = await this.configManager.getDefaultLocale();
-    const defaultLocaleFile = await this.configManager.getLocaleFilePath(
+    const defaultLocalePath = await this.configManager.getLocaleFilePath(
       defaultLocale
     );
-    if (!existsSync(defaultLocaleFile)) {
+
+    // Check if locale path exists (file or directory)
+    if (!existsSync(defaultLocalePath)) {
       window.showWarningMessage(
-        `Default locale file not found: ${defaultLocaleFile}`
+        `Default locale not found: ${defaultLocalePath}`
       );
       return null;
     }
 
-    const keyPosition = await findKeyInJsonFile(
-      translationKey,
-      defaultLocaleFile
-    );
-    if (keyPosition) {
+    const result = await findKeyInLocale(translationKey, defaultLocalePath);
+
+    if (result) {
       return new Location(
-        Uri.file(defaultLocaleFile),
-        new Position(keyPosition.line, keyPosition.character)
+        Uri.file(result.filePath),
+        new Position(result.position.line, result.position.character)
       );
     }
 
     window.showWarningMessage(
-      `Key "${translationKey}" not found in default locale file`
+      `Key "${translationKey}" not found in default locale`
     );
     return null;
   }
@@ -71,18 +71,21 @@ export class I18nNavigationProvider implements DefinitionProvider {
     translationKey: string,
     locale: string
   ): Promise<boolean> {
-    const filePath = await this.configManager.getLocaleFilePath(locale);
+    const localePath = await this.configManager.getLocaleFilePath(locale);
 
-    if (!existsSync(filePath)) {
-      window.showWarningMessage(`Locale file not found: ${filePath}`);
+    if (!existsSync(localePath)) {
+      window.showWarningMessage(`Locale not found: ${localePath}`);
       return false;
     }
 
-    const keyPosition = await findKeyInJsonFile(translationKey, filePath);
-    if (keyPosition) {
-      const document = await workspace.openTextDocument(filePath);
+    const result = await findKeyInLocale(translationKey, localePath);
+    if (result) {
+      const document = await workspace.openTextDocument(result.filePath);
       const editor = await window.showTextDocument(document);
-      const position = new Position(keyPosition.line, keyPosition.character);
+      const position = new Position(
+        result.position.line,
+        result.position.character
+      );
       editor.selection = new Selection(position, position);
       editor.revealRange(new Range(position, position));
       return true;
