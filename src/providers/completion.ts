@@ -66,12 +66,18 @@ export class I18nCompletionProvider implements CompletionItemProvider {
 
     try {
       const defaultLocale = await this.configManager.getDefaultLocale();
-      const defaultLocaleFile = await this.configManager.getLocaleFilePath(
+      const defaultLocalePath = await this.configManager.getLocaleFilePath(
         defaultLocale
       );
-      if (existsSync(defaultLocaleFile)) {
-        const content = readFileSync(defaultLocaleFile, "utf-8");
-        this.translations = parse(content);
+
+      if (existsSync(defaultLocalePath)) {
+        const stats = require("fs").statSync(defaultLocalePath);
+        if (stats.isDirectory()) {
+          this.translations = this.loadDirectory(defaultLocalePath);
+        } else {
+          const content = readFileSync(defaultLocalePath, "utf-8");
+          this.translations = parse(content);
+        }
       } else {
         this.translations = {};
       }
@@ -79,6 +85,42 @@ export class I18nCompletionProvider implements CompletionItemProvider {
       // Failed to load or parse translation file
       this.translations = {};
     }
+  }
+
+  private loadDirectory(dirPath: string): any {
+    const fs = require("fs");
+    const path = require("path");
+    const result: any = {};
+
+    const items = fs.readdirSync(dirPath, { withFileTypes: true });
+
+    for (const item of items) {
+      if (item.isFile() && item.name.endsWith(".json")) {
+        try {
+          const content = fs.readFileSync(
+            path.join(dirPath, item.name),
+            "utf-8"
+          );
+          const json = parse(content);
+          const fileName = item.name.replace(".json", "");
+
+          if (fileName === "common" || fileName === "index") {
+            // Flatten common.json and index.json into root
+            Object.assign(result, json);
+          } else {
+            // Namespace other files
+            result[fileName] = json;
+          }
+        } catch (e) {
+          // Ignore bad files
+        }
+      } else if (item.isDirectory()) {
+        const key = item.name;
+        result[key] = this.loadDirectory(path.join(dirPath, item.name));
+      }
+    }
+
+    return result;
   }
 
   /**

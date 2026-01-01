@@ -1,6 +1,6 @@
 import vscode from "vscode";
 import { ConfigManager } from "../utils/configManager";
-import { findKeyInJsonFile } from "../utils/keyFinder";
+import { findKeyInLocale } from "../utils/keyFinder";
 import { existsSync } from "fs";
 import { commands, Disposable } from "vscode";
 
@@ -21,34 +21,34 @@ async function navigateToLocaleKey(
   targetLocale: string
 ): Promise<void> {
   try {
-    // Get the target locale file path
-    const targetFilePath = await configManager.getLocaleFilePath(targetLocale);
+    // Get the target locale path (file or directory)
+    const targetLocalePath = await configManager.getLocaleFilePath(
+      targetLocale
+    );
 
-    // Check if the target file exists
-    if (!existsSync(targetFilePath)) {
-      vscode.window.showWarningMessage(
-        `Locale file not found: ${targetFilePath}`
-      );
+    // Check if the target exists
+    if (!existsSync(targetLocalePath)) {
+      vscode.window.showWarningMessage(`Locale not found: ${targetLocalePath}`);
       return;
     }
 
-    // Find the key position in the target file
-    const keyPosition = await findKeyInJsonFile(keyPath, targetFilePath);
+    // Find the key position in the target locale
+    const result = await findKeyInLocale(keyPath, targetLocalePath);
 
-    if (!keyPosition) {
+    if (!result) {
       vscode.window.showWarningMessage(
-        `Key "${keyPath}" not found in ${targetLocale} locale file`
+        `Key "${keyPath}" not found in ${targetLocale} locale`
       );
       return;
     }
 
     // Open the target file and navigate to the key
-    const document = await vscode.workspace.openTextDocument(targetFilePath);
+    const document = await vscode.workspace.openTextDocument(result.filePath);
     const editor = await vscode.window.showTextDocument(document);
 
     const position = new vscode.Position(
-      keyPosition.line,
-      keyPosition.character
+      result.position.line,
+      result.position.character
     );
     editor.selection = new vscode.Selection(position, position);
     editor.revealRange(
