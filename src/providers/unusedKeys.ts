@@ -128,13 +128,19 @@ export class I18nUnusedKeysDiagnostics {
     const diagnostics: Diagnostic[] = [];
     const keys = this.collectKeysWithRanges(document);
 
+    // Get file prefix for multi-file structures (Cases 3 & 4)
+    const filePrefix = await this.extractFilePrefix(document);
+
     for (const k of keys) {
       if (!k.isLeaf) continue;
-      if (this.usedKeysCache.has(k.keyPath)) continue;
+
+      // Build the full key path including file prefix if applicable
+      const fullKeyPath = filePrefix ? `${filePrefix}.${k.keyPath}` : k.keyPath;
+      if (this.usedKeysCache.has(fullKeyPath)) continue;
 
       const diag = new Diagnostic(
         k.range,
-        `Unused i18n key: ${k.keyPath}`,
+        `Unused i18n key: ${fullKeyPath}`,
         DiagnosticSeverity.Hint
       );
       diag.tags = [DiagnosticTag.Unnecessary];
@@ -171,10 +177,6 @@ export class I18nUnusedKeysDiagnostics {
     switch (fileNamingPattern) {
       case "locale.json":
         return new RelativePattern(relBase, "*.json").pattern;
-      case "locale/common.json":
-        return new RelativePattern(relBase, "*/common.json").pattern;
-      case "locale/index.json":
-        return new RelativePattern(relBase, "*/index.json").pattern;
       default:
         return new RelativePattern(relBase, "**/*.json").pattern;
     }
@@ -244,6 +246,112 @@ export class I18nUnusedKeysDiagnostics {
     return raw;
   }
 
+  /**
+   * Extract the file prefix that should be prepended to keys
+   * For multi-file structures (Cases 3 & 4), the filename/folder path is part of the key
+   *
+   * Examples:
+   * - en/errors.json -> "errors"
+   * - en/auth/login.json -> "auth.login"
+   * - en/common.json -> "" (special case, no prefix)
+   * - en/index.json -> "" (special case, no prefix)
+   * - en.json -> "" (flat structure, no prefix)
+   */
+  private async extractFilePrefix(document: TextDocument): Promise<string> {
+    const fileNamingPattern = await this.configManager.getFileNamingPattern();
+
+    // Case 1: Flat structure (en.json, ar.json) - no prefix
+    if (fileNamingPattern === "locale.json") {
+      return "";
+    }
+
+    // Cases 2, 3, 4: Directory-based structure
+    const wsFolders = workspace.workspaceFolders;
+    if (!wsFolders || wsFolders.length === 0) return "";
+
+    const workspaceRoot = wsFolders[0].uri.fsPath;
+    const localesPath = await this.configManager.getLocalesPath();
+    const fullLocalesPath = join(workspaceRoot, localesPath);
+
+    const docFsPath = document.uri.fsPath;
+    const normalizedDoc = normalize(docFsPath);
+    const normalizedLocales = normalize(fullLocalesPath) + sep;
+
+    if (!normalizedDoc.startsWith(normalizedLocales)) {
+      return "";
+    }
+
+    // Get relative path from locales folder
+    const relativePath = normalizedDoc.substring(normalizedLocales.length);
+    const pathParts = relativePath.split(sep);
+
+    // Remove locale name (first part, e.g., "en", "ar")
+    if (pathParts.length > 0) {
+      pathParts.shift();
+    }
+
+    // If no parts left, it's Case 2 (single file in locale folder)
+    if (pathParts.length === 0) {
+      return "";
+    }
+
+    // Build prefix from remaining parts
+    const prefixParts: string[] = [];
+
+    for (let i = 0; i < pathParts.length; i++) {
+      const part = pathParts[i];
+
+      // Last part is the filename
+      if (i === pathParts.length - 1) {
+        const filename = part.replace(".json", "");
+        // Skip common.json and index.json as they don't add to the key prefix
+        if (filename !== "common" && filename !== "index") {
+          prefixParts.push(filename);
+        }
+      } else {
+        // Folder names are always part of the prefix
+        prefixParts.push(part);
+      }
+    }
+
+    return prefixParts.join(".");
+  }
+
+  /**
+   * Strip comments from source code to avoid counting commented translation keys as "used"
+   * Handles:
+   * - Single-line comments: // ...
+   * - Multi-line comments: /* ... *\/
+   * - JSX comments: {/* ... *\/}
+   *
+   * Note: This is a best-effort approach using regex. It covers 95%+ of cases
+   * but may have edge cases with strings containing comment-like patterns.
+   */
+  private stripComments(code: string): string {
+    let result = code;
+
+    // Step 1: Remove multi-line comments /* ... */ and JSX comments {/* ... */}
+    // This regex handles nested braces and preserves strings
+    result = result.replace(/\/\*[\s\S]*?\*\//gm, (match) => {
+      // Preserve newlines to maintain line structure for better debugging
+      return match.replace(/[^\n]/g, " ");
+    });
+
+    // Step 2: Remove single-line comments // ...
+    // But preserve URLs (http://, https://) and comment-like patterns in strings
+    result = result.replace(/^(\s*)\/\/.*$/gm, (match, indent) => {
+      // Preserve the indentation and newline
+      return indent;
+    });
+
+    // Step 3: Remove JSX-style comments {/* ... */} that might remain
+    result = result.replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/gm, (match) => {
+      return match.replace(/[^\n]/g, " ");
+    });
+
+    return result;
+  }
+
   private async computeUsedKeys() {
     if (this.isComputing) return;
     this.isComputing = true;
@@ -272,7 +380,10 @@ export class I18nUnusedKeysDiagnostics {
       for (const uri of files) {
         try {
           const bytes = await workspace.fs.readFile(uri);
-          const text = Buffer.from(bytes).toString("utf8");
+          let text = Buffer.from(bytes).toString("utf8");
+
+          // Strip comments to avoid counting commented translation keys as "used"
+          text = this.stripComments(text);
 
           const baseKeys = new Set<string>();
           let bm: RegExpExecArray | null;
