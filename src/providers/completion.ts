@@ -7,6 +7,8 @@ import {
   workspace,
   SnippetString,
   MarkdownString,
+  RelativePattern,
+  FileSystemWatcher,
 } from "vscode";
 import { ConfigManager } from "../utils/configManager";
 import { findBaseKey } from "../utils/findBaseKey";
@@ -19,6 +21,7 @@ import { parse } from "jsonc-parser";
  */
 export class I18nCompletionProvider implements CompletionItemProvider {
   private translations: Record<string, any> = {};
+  private watcher: FileSystemWatcher | undefined;
 
   constructor(
     private configManager: ConfigManager,
@@ -34,17 +37,13 @@ export class I18nCompletionProvider implements CompletionItemProvider {
       onConfigChange();
     }
 
-    // Also reload when the default locale file is saved/changed
+    // Setup and keep a persistent watcher for default locale files
     (async () => {
-      const defaultLocale = await this.configManager.getDefaultLocale();
-      const defaultLocaleFile = await this.configManager.getLocaleFilePath(
-        defaultLocale
-      );
-      const watcher = workspace.createFileSystemWatcher(defaultLocaleFile);
-      watcher.onDidChange(() => this.loadTranslations());
-      watcher.onDidCreate(() => this.loadTranslations());
-      watcher.onDidDelete(() => (this.translations = {}));
+      await this.setupWatcher();
     })();
+    workspace.onDidChangeConfiguration(async () => {
+      await this.setupWatcher();
+    });
   }
 
   /**
@@ -84,6 +83,48 @@ export class I18nCompletionProvider implements CompletionItemProvider {
     } catch (error) {
       // Failed to load or parse translation file
       this.translations = {};
+    }
+  }
+
+  private async setupWatcher() {
+    try {
+      const defaultLocale = await this.configManager.getDefaultLocale();
+      const defaultLocalePath = await this.configManager.getLocaleFilePath(
+        defaultLocale
+      );
+
+      let watcherPattern: any;
+      try {
+        const fs = require("fs");
+        const path = require("path");
+        if (
+          fs.existsSync(defaultLocalePath) &&
+          fs.statSync(defaultLocalePath).isDirectory()
+        ) {
+          watcherPattern = new RelativePattern(defaultLocalePath, "**/*.json");
+        } else {
+          watcherPattern = new RelativePattern(
+            path.dirname(defaultLocalePath),
+            path.basename(defaultLocalePath)
+          );
+        }
+      } catch (e) {
+        return;
+      }
+
+      this.watcher?.dispose();
+      this.watcher = workspace.createFileSystemWatcher(watcherPattern);
+      this.watcher.onDidChange(() => {
+        this.loadTranslations();
+      });
+      this.watcher.onDidCreate(() => {
+        this.loadTranslations();
+      });
+      this.watcher.onDidDelete(() => {
+        this.loadTranslations();
+      });
+    } catch (e) {
+      return;
     }
   }
 
