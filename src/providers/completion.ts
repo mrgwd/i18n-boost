@@ -251,6 +251,7 @@ export class I18nCompletionProvider implements CompletionItemProvider {
         key,
         isObject ? CompletionItemKind.Module : CompletionItemKind.Value
       );
+      item.sortText = "0" + key;
 
       if (isObject) {
         item.insertText = new SnippetString(key + ".");
