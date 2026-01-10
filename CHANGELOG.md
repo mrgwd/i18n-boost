@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## 1.1.1 (2026-01-09)
+
+### Added
+
+- Automatically detects the correct translation file structure.
+
+- Supports both single-file and multi-file-per-locale setups (e.g. locales/ar.json or locales/ar/\*.json) with zero configuration.
+
+### Improved
+
+- Redesigned configuration experience.
+
+- Improved autocomplete suggestions by removing the redundant entry that matches the user's current input.
+
+### Fixed
+
+- Fixed a bug with unused keys cache not updating correctly.
+
+- Fixed a bug where newly added translation keys did not appear immediately in autocomplete suggestions.
+
+- Fixed a bug where the commented keys were being detected as used keys.
+
 ## 1.1.0 (2025-10-25)
 
 ### Added
@@ -17,7 +39,7 @@ All notable changes to this project will be documented in this file.
   - Removed `supportedLocales` from config — locales are now automatically detected based on `localesPath` and `fileNamingPattern`.
 - Better Docs:
   - README: Added badges and supported frameworks.
-  - CHANGELOG: Followd keep-changelog guidelines.
+  - CHANGELOG: Followed keep-changelog guidelines.
 - Reduced complexity and improved overall extension performance and responsiveness.
 
 ### Removed
