@@ -138,4 +138,32 @@ describe("I18n Completion Provider", () => {
       assert(provider, "Should create provider instance");
     });
   });
+  describe("sorting", () => {
+    it("should prioritize suggestions with sortText", async () => {
+      const mockTranslations = {
+        title: "Title",
+      };
+      (provider as any).loadTranslations = () => {
+        (provider as any).translations = mockTranslations;
+      };
+      await (provider as any).loadTranslations();
+
+      const mockDocument = {
+        lineAt: () => ({
+          text: 't("t")',
+          substring: () => 't("t")',
+        }),
+      };
+      const mockPosition = { line: 0, character: 4 };
+
+      const result = await provider.provideCompletionItems(
+        mockDocument as any,
+        mockPosition as any
+      );
+
+      assert.strictEqual(result.length, 1);
+      assert.strictEqual(result[0].label, "title");
+      assert.strictEqual(result[0].sortText, "0title");
+    });
+  });
 });
