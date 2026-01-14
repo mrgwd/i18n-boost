@@ -123,9 +123,11 @@ export class I18nHoverProvider implements HoverProvider {
    */
   private async extractFilePrefix(document: TextDocument): Promise<string> {
     const fileNamingPattern = await this.configManager.getFileNamingPattern();
+    const keyStrategy = await this.configManager.getKeyStrategy();
 
     // Case 1: Flat structure (en.json, ar.json) - no prefix
-    if (fileNamingPattern === "locale.json") {
+    // OR keyStrategy is "flat" - no prefix
+    if (fileNamingPattern === "locale.json" || keyStrategy === "flat") {
       return "";
     }
 
