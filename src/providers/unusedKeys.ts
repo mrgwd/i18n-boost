@@ -325,6 +325,7 @@ export class I18nUnusedKeysDiagnostics {
    * - Single-line comments: // ...
    * - Multi-line comments: /* ... *\/
    * - JSX comments: {/* ... *\/}
+   * - HTML comments: <!-- ... -->
    *
    * Note: This is a best-effort approach using regex. It covers 95%+ of cases
    * but may have edge cases with strings containing comment-like patterns.
@@ -351,6 +352,10 @@ export class I18nUnusedKeysDiagnostics {
       return match.replace(/[^\n]/g, " ");
     });
 
+    // Step 4: Remove HTML comments <!-- ... -->
+    result = result.replace(/<!--[\s\S]*?-->/gm, (match) => {
+      return match.replace(/[^\n]/g, " ");
+    });
     return result;
   }
 
