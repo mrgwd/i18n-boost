@@ -40,6 +40,7 @@ export class I18nNavigationProvider implements DefinitionProvider {
     const defaultLocalePath = await this.configManager.getLocaleFilePath(
       defaultLocale
     );
+    const keyStrategy = await this.configManager.getKeyStrategy();
 
     // Check if locale path exists (file or directory)
     if (!existsSync(defaultLocalePath)) {
@@ -49,7 +50,11 @@ export class I18nNavigationProvider implements DefinitionProvider {
       return null;
     }
 
-    const result = await findKeyInLocale(translationKey, defaultLocalePath);
+    const result = await findKeyInLocale(
+      translationKey,
+      defaultLocalePath,
+      keyStrategy
+    );
 
     if (result) {
       return new Location(
@@ -72,13 +77,18 @@ export class I18nNavigationProvider implements DefinitionProvider {
     locale: string
   ): Promise<boolean> {
     const localePath = await this.configManager.getLocaleFilePath(locale);
+    const keyStrategy = await this.configManager.getKeyStrategy();
 
     if (!existsSync(localePath)) {
       window.showWarningMessage(`Locale not found: ${localePath}`);
       return false;
     }
 
-    const result = await findKeyInLocale(translationKey, localePath);
+    const result = await findKeyInLocale(
+      translationKey,
+      localePath,
+      keyStrategy
+    );
     if (result) {
       const document = await workspace.openTextDocument(result.filePath);
       const editor = await window.showTextDocument(document);

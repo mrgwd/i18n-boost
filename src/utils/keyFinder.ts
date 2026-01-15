@@ -178,7 +178,8 @@ function escapeRegExp(string: string): string {
  */
 export async function findKeyInLocale(
   key: string,
-  localePath: string
+  localePath: string,
+  keyStrategy: "filename" | "flat" = "filename"
 ): Promise<{ filePath: string; position: KeyPosition } | null> {
   const fs = require("fs");
   const path = require("path");
@@ -195,6 +196,10 @@ export async function findKeyInLocale(
   }
 
   if (stats.isDirectory()) {
+    if (keyStrategy === "flat") {
+      return findKeyInDirectoryRecursively(key, localePath);
+    }
+
     // Try to map key parts to file structure
     // e.g. "dashboard.title" -> "dashboard.json" (key: "title")
     // e.g. "auth.login.title" -> "auth/login.json" (key: "title")
@@ -263,5 +268,30 @@ export async function findKeyInLocale(
     // Deep fallback: Search ALL json files? (Maybe too slow, let's skip for now or limit depth)
   }
 
+  return null;
+}
+
+async function findKeyInDirectoryRecursively(
+  key: string,
+  dirPath: string
+): Promise<{ filePath: string; position: KeyPosition } | null> {
+  const fs = require("fs");
+  const path = require("path");
+  const items = fs.readdirSync(dirPath, { withFileTypes: true });
+
+  for (const item of items) {
+    const fullPath = path.join(dirPath, item.name);
+    if (item.isFile() && item.name.endsWith(".json")) {
+      const position = await findKeyInJsonFile(key, fullPath);
+      if (position) {
+        return { filePath: fullPath, position };
+      }
+    } else if (item.isDirectory()) {
+      const result = await findKeyInDirectoryRecursively(key, fullPath);
+      if (result) {
+        return result;
+      }
+    }
+  }
   return null;
 }

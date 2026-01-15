@@ -11,6 +11,7 @@ export interface I18nBoostSettings {
   defaultLocale: string;
   functionNames: string[];
   fileNamingPattern: "locale.json" | "locale/**/*.json" | "auto";
+  keyStrategy: "filename" | "flat";
   enabled: boolean;
 }
 
@@ -41,6 +42,7 @@ export class ConfigManager {
         config.get<"locale.json" | "locale/**/*.json" | "auto">(
           "fileNamingPattern"
         ) || "auto",
+      keyStrategy: config.get<"filename" | "flat">("keyStrategy") || "filename",
       enabled: config.get<boolean>("enabled") !== false,
     };
 
@@ -100,6 +102,14 @@ export class ConfigManager {
   > {
     const settings = await this.getSettings();
     return settings.fileNamingPattern;
+  }
+
+  /**
+   * Get key strategy
+   */
+  async getKeyStrategy(): Promise<"filename" | "flat"> {
+    const settings = await this.getSettings();
+    return settings.keyStrategy;
   }
 
   /**

@@ -71,8 +71,13 @@ export class I18nCompletionProvider implements CompletionItemProvider {
 
       if (existsSync(defaultLocalePath)) {
         const stats = require("fs").statSync(defaultLocalePath);
+        const keyStrategy = await this.configManager.getKeyStrategy();
+
         if (stats.isDirectory()) {
-          this.translations = this.loadDirectory(defaultLocalePath);
+          this.translations = this.loadDirectory(
+            defaultLocalePath,
+            keyStrategy
+          );
         } else {
           const content = readFileSync(defaultLocalePath, "utf-8");
           this.translations = parse(content);
@@ -128,7 +133,10 @@ export class I18nCompletionProvider implements CompletionItemProvider {
     }
   }
 
-  private loadDirectory(dirPath: string): any {
+  private loadDirectory(
+    dirPath: string,
+    keyStrategy: "filename" | "flat"
+  ): any {
     const fs = require("fs");
     const path = require("path");
     const result: any = {};
@@ -145,19 +153,34 @@ export class I18nCompletionProvider implements CompletionItemProvider {
           const json = parse(content);
           const fileName = item.name.replace(".json", "");
 
-          if (fileName === "common" || fileName === "index") {
-            // Flatten common.json and index.json into root
+          if (keyStrategy === "flat") {
+            // Flatten all files into root
             Object.assign(result, json);
           } else {
-            // Namespace other files
-            result[fileName] = json;
+            if (fileName === "common" || fileName === "index") {
+              // Flatten common.json and index.json into root
+              Object.assign(result, json);
+            } else {
+              // Namespace other files
+              result[fileName] = json;
+            }
           }
         } catch (e) {
           // Ignore bad files
         }
       } else if (item.isDirectory()) {
-        const key = item.name;
-        result[key] = this.loadDirectory(path.join(dirPath, item.name));
+        const subResult = this.loadDirectory(
+          path.join(dirPath, item.name),
+          keyStrategy
+        );
+
+        if (keyStrategy === "flat") {
+          // Flatten subdirectories into root
+          Object.assign(result, subResult);
+        } else {
+          const key = item.name;
+          result[key] = subResult;
+        }
       }
     }
 

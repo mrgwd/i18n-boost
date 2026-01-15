@@ -21,7 +21,7 @@ export function activate(context: ExtensionContext) {
     vscode.languages.registerDefinitionProvider(selector, navigationProvider)
   );
 
-  context.subscriptions.push(registerCopyFullKeyCommand());
+  context.subscriptions.push(registerCopyFullKeyCommand(configManager));
   context.subscriptions.push(registerShowLocalesCommand(configManager));
   context.subscriptions.push(
     registerSelectLocaleCommand(configManager, navigationProvider)
