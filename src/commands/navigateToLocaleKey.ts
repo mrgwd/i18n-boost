@@ -32,8 +32,14 @@ async function navigateToLocaleKey(
       return;
     }
 
+    const keyStrategy = await configManager.getKeyStrategy();
+
     // Find the key position in the target locale
-    const result = await findKeyInLocale(keyPath, targetLocalePath);
+    const result = await findKeyInLocale(
+      keyPath,
+      targetLocalePath,
+      keyStrategy
+    );
 
     if (!result) {
       vscode.window.showWarningMessage(
