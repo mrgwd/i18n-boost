@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## 1.1.1 (2026-01-17)
+
+### Added
+
+- Automatic detection of translation file structure.
+- New `i18nBoost.keyStrategy` setting to choose between `filename` and `function` for including file names in translation keys.
+- Support for multi-file-per-locale setups (e.g., `locales/ar/*.json`) with zero configuration.
+
+### Improved
+
+- Redesigned configuration experience.
+- Refined autocomplete suggestions by removing redundant entries that match the current input.
+- Enhanced README with documentation for new features and improved clarity.
+
+### Fixed
+
+- Fixed a bug where the unused keys cache was not updating correctly.
+- Fixed an issue where newly added translation keys did not appear immediately in autocomplete suggestions.
+- Fixed a bug where commented-out keys were being detected as used keys.
+
 ## 1.1.0 (2025-10-25)
 
 ### Added
