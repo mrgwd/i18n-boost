@@ -1,25 +1,27 @@
-<div align="center"> <img width="36" height="36" alt="image"  src="https://raw.githubusercontent.com/mrgwd/i18n-boost/main/src/images/icon.webp" /> <h1> I18n Boost</h1> </div>
+  <div align="center"> <img width="36" height="36" alt="image"  src="https://raw.githubusercontent.com/mrgwd/i18n-boost/main/src/images/icon.webp" /> <h1> I18n Boost</h1> </div>
 
-<div align="center">
+  <div align="center">
 
 Supercharge your internationalization (i18n) workflow. Integrates directly into your editor to help you **navigate, manage, and use translation keys faster**.
 
-<p>
-<img src="https://img.shields.io/badge/lightweight-138Kb-63ba84" alt="Download Size" />
-<a href="https://marketplace.visualstudio.com/items?itemName=mrgwd.i18n-boost" target="__blank"><img src="https://img.shields.io/visual-studio-marketplace/v/mrgwd.i18n-boost?color=blue&amp;label=VS%20Code%20Marketplace&logo=visual-studio-code" alt="Visual Studio Marketplace Version" /></a>
-<a href="https://open-vsx.org/extension/mrgwd/i18n-boost" target="__blank"><img src="https://img.shields.io/open-vsx/dt/mrgwd/i18n-boost?color=a38eed" alt="Open VSX Downloads" /></a>
+  <p>
+  <img src="https://img.shields.io/badge/lightweight-152Kb-63ba84" alt="Download Size" />
+  <a href="https://marketplace.visualstudio.com/items?itemName=mrgwd.i18n-boost" target="__blank"><img src="https://img.shields.io/visual-studio-marketplace/v/mrgwd.i18n-boost?color=blue&amp;label=VS%20Code%20Marketplace&logo=visual-studio-code" alt="Visual Studio Marketplace Version" /></a>
+  <a href="https://open-vsx.org/extension/mrgwd/i18n-boost" target="__blank"><img src="https://img.shields.io/open-vsx/dt/mrgwd/i18n-boost?color=a38eed" alt="Open VSX Downloads" /></a>
 
-</div>
+  </div>
 
-</p>
+  </p>
 
 ## Supported Frameworks
 
-<div align="center">
+  <div align="center">
 
-<img width="360" height="53" alt="Supported Framworks" src="https://raw.githubusercontent.com/mrgwd/i18n-boost/main/assets/supported_framworks.png" />
+  <img width="360" height="53" alt="Supported Frameworks" src="https://raw.githubusercontent.com/mrgwd/i18n-boost/main/assets/supported_framworks.png" />
 
-</div>
+  <p opacity="0.5">Works with React, Vue, Svelte, Next.js, i18next, vue-i18n, next-intl and more.</p>
+
+  </div>
 
 ## Features
 
@@ -91,27 +93,52 @@ Effortlessly copy the full nested key path of any translation value in your loca
 
 ## ⚙️ Configuration
 
-I18n Boost uses VS Code's built-in settings system for configuration. You can configure it through:
+### ✨ Zero Config (Auto-Discovery)
 
-- **Settings UI**: `Ctrl+,` → Search for "I18n Boost"
-- **Workspace Settings**: `.vscode/settings.json` (project-specific)
-- **User Settings**: Global settings for all projects
+I18n Boost automatically detects your locale files and structure.
+If you follow standard conventions (e.g., `src/locales`, `src/i18n`, or `public/locales`), **you likely don't need to configure anything.**
 
 ### Settings
 
-| Setting                       | Description                                                   | Default Value                        |
-| ----------------------------- | ------------------------------------------------------------- | ------------------------------------ |
-| `i18nBoost.localesPath`       | Path to translation files folder (relative to workspace root) | `"src/i18n"`                         |
-| `i18nBoost.defaultLocale`     | Default locale to navigate to on Ctrl+Click                   | `"en"`                               |
-| `i18nBoost.functionNames`     | Function names that indicate translation keys                 | `["t", "translate", "$t", "i18n.t"]` |
-| `i18nBoost.fileNamingPattern` | Pattern for locale file naming                                | `"locale.json"`                      |
-| `i18nBoost.enabled`           | Enable/disable extension features                             | `true`                               |
+- **Workspace Settings**: `.vscode/settings.json` (project-specific)
+- **Settings UI**: `Ctrl+,` → Search for "I18n Boost"
+- **User Settings**: Global settings for all projects
 
-### File Naming Patterns
+### Custom Configuration
 
-- `"locale.json"`: `en.json`, `fr.json`, `de.json`
-- `"locale/common.json"`: `en/common.json`, `fr/common.json`
-- `"locale/index.json"`: `en/index.json`, `fr/index.json`
+| Setting                       | Description                                                   | Default Value |
+| ----------------------------- | ------------------------------------------------------------- | ------------- |
+| `i18nBoost.localesPath`       | Path to translation files folder (relative to workspace root) | `"src/i18n"`  |
+| `i18nBoost.fileNamingPattern` | Pattern for locale file naming                                | `"auto"`      |
+| `i18nBoost.keyStrategy`       | How translation keys are constructed (see below)              | `"filename"`  |
+| `i18nBoost.functionNames`     | Function names that trigger autocomplete (e.g., `t`, `$t`)    | `["t", ...]`  |
+| `i18nBoost.defaultLocale`     | Default locale to navigate to on Ctrl+Click                   | `"en"`        |
+| `i18nBoost.enabled`           | Enable/disable extension features                             | `true`        |
+
+### 📂 File Naming Patterns
+
+Define how your translation files are organized within the `localesPath`:
+
+- **`"auto"`**: Automatically detects the pattern based on your files.
+- **`"locale.json"`**: Each locale is a single JSON file.
+  - _Example_: `en.json`, `ar.json`, `es.json`
+- **`"locale/**/\*.json"`\*\*: Each locale is a directory containing multiple JSON files.
+  - _Example_: `en/common.json`, `en/auth/login.json`
+
+### 🔑 Understanding `keyStrategy`
+
+This setting determines how the extension reads your translation keys. Choose the one that matches your i18n library usage:
+
+- **`filename` (Default)**: The file name acts as a namespace.
+
+  - _Structure_: `locales/en/auth.json` containing key `login`.
+  - _Usage_: `t("auth.login")`
+  - _Best for_: Projects that split translations into multiple files (namespaces).
+
+- **`flat`**: File paths are ignored; keys are read directly from the JSON structure.
+  - _Structure_: `locales/en.json` containing nested object `auth: { login: ... }`.
+  - _Usage_: `t("auth.login")`
+  - _Best for_: Projects using a single large translation file or libraries that merge all files.
 
 ### Example Configuration
 
@@ -119,7 +146,7 @@ I18n Boost uses VS Code's built-in settings system for configuration. You can co
 
 ```json
 {
-  "i18nBoost.localesPath": "./translations",
+  "i18nBoost.localesPath": "./src/locales",
   "i18nBoost.defaultLocale": "en",
   "i18nBoost.functionNames": [
     "t",
@@ -129,12 +156,11 @@ I18n Boost uses VS Code's built-in settings system for configuration. You can co
     "t.raw",
     "t.rich"
   ],
-  "i18nBoost.fileNamingPattern": "locale.json",
+  "i18nBoost.fileNamingPattern": "auto",
+  "i18nBoost.keyStrategy": "filename",
   "i18nBoost.enabled": true
 }
 ```
-
-**Note**: Starting from version 1.1.0 locales are automatically discovered from your filesystem based on the `localesPath` and `fileNamingPattern` settings. No manual configuration needed!
 
 ## 🛠 Installation
 
@@ -184,38 +210,45 @@ The extension will automatically discover your locale files based on your config
 
 ## 🐛 Troubleshooting
 
-<details>
- <summary><b>Extension not working?</b></summary>
+  <details>
+  <summary><b>Extension not working?</b></summary>
 
 1.  **Check your settings**: Ensure I18n Boost is enabled in VS Code settings
-
 2.  **Verify file paths**: Make sure `i18nBoost.localesPath` points to your translation files
 3.  **Check file naming**: Ensure your locale files match the `i18nBoost.fileNamingPattern` setting
 4.  **Restart VS Code**: Sometimes a restart is needed after configuration changes
 </details>
 
-<details>
- <summary><b>Autocomplete not showing?</b></summary>
+  <details>
+  <summary><b>Autocomplete not showing?</b></summary>
 
-5.  **Verify function names**: Check that your translation function names are in the `i18nBoost.functionNames` array
-6.  **Check file types**: Ensure you're working in supported file types (`.js`, `.ts`, `.jsx`, `.tsx`, `.vue`, `.svelte`)
-7.  **Trigger manually**: Try typing `t("` and then `Ctrl+Space` to trigger suggestions
+1.  **Verify function names**: Check that your translation function names are in the `i18nBoost.functionNames` array
+2.  **Check file types**: Ensure you're working in supported file types (`.js`, `.ts`, `.jsx`, `.tsx`, `.vue`, `.svelte`)
+3.  **Trigger manually**: Try typing `t("` and then `Ctrl+Space` to trigger suggestions
 </details>
 
-<details>
- <summary><b>Navigation not working?</b></summary>
+  <details>
+  <summary><b>Navigation not working?</b></summary>
 
 1.  **Check default locale**: Ensure your `i18nBoost.defaultLocale` file exists
 2.  **Verify key exists**: Make sure the translation key exists in your default locale file
 3.  **Check function names**: Ensure the function name matches your configuration
 </details>
 
-<details>
- <summary><b>Unused keys not detected?</b></summary>
+  <details>
+  <summary><b>Unused keys not detected?</b></summary>
 
 1.  **Wait for scan**: The extension scans your codebase when files are saved
 2.  **Check file patterns**: Ensure your code files match the supported patterns
 3.  **Verify function names**: Make sure your translation function calls use the configured function names
+</details>
+
+<details>
+ <summary><b>Key exists but not suggested?</b></summary>
+
+- Check your `keyStrategy` setting
+- Ensure the key exists in the default locale
+- Restart VS Code after changing configuration
 </details>
 
 ## 🗂 Project Structure
@@ -256,6 +289,10 @@ The extension only reads your project files to provide i18n functionality and do
 ## 📜 License
 
 This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+
+## Why I built this extension?
+
+Read the [backstory blog post](https://mohamedramadan.dev/en/blog/i18n-boost) — it's a ~6-min read.
 
 ## 📫 Contact
 
