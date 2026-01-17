@@ -2,7 +2,7 @@
   "name": "i18n-boost",
   "displayName": "I18n Boost",
   "publisher": "mrgwd",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "engines": {
     "vscode": "^1.80.0"
   },
@@ -84,13 +84,22 @@
         },
         "i18nBoost.fileNamingPattern": {
           "type": "string",
-          "default": "locale.json",
+          "default": "auto",
           "enum": [
+            "auto",
             "locale.json",
-            "locale/common.json",
-            "locale/index.json"
+            "locale/**/*.json"
           ],
-          "description": "Pattern for locale file naming."
+          "description": "Pattern for locale file naming. 'locale/**/*.json' supports both flat and nested directory structures."
+        },
+        "i18nBoost.keyStrategy": {
+          "type": "string",
+          "default": "filename",
+          "enum": [
+            "filename",
+            "flat"
+          ],
+          "description": "Strategy for generating translation keys. 'filename' uses file/folder names as part of the key. 'flat' ignores file structure and merges all keys."
         },
         "i18nBoost.enabled": {
           "type": "boolean",
