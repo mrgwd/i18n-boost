@@ -1,10 +1,11 @@
 import { getKeyPathAtPosition } from "../utils/jsonWalker";
 import { commands, Disposable, env, window, workspace } from "vscode";
 import { ConfigManager } from "../utils/configManager";
-import { join, normalize, sep } from "path";
+import { normalize, sep } from "path";
+import { discoverLocaleRoots } from "../utils/localeDiscovery";
 
 export function registerCopyFullKeyCommand(
-  configManager: ConfigManager
+  configManager: ConfigManager,
 ): Disposable {
   const disposable = commands.registerCommand(
     "i18nBoost.copyFullKey",
@@ -19,7 +20,7 @@ export function registerCopyFullKeyCommand(
       // Only JSON files for this feature
       if (doc.languageId !== "json" && doc.languageId !== "jsonc") {
         window.showInformationMessage(
-          "Copy translation key: open a JSON file and place the cursor on a value or key"
+          "Copy translation key: open a JSON file and place the cursor on a value or key",
         );
         return;
       }
@@ -28,11 +29,11 @@ export function registerCopyFullKeyCommand(
       try {
         let keyPath = getKeyPathAtPosition(
           doc.getText(),
-          doc.offsetAt(position)
+          doc.offsetAt(position),
         );
         if (!keyPath) {
           window.showWarningMessage(
-            "Could not determine translation key at cursor"
+            "Could not determine translation key at cursor",
           );
           return;
         }
@@ -48,7 +49,7 @@ export function registerCopyFullKeyCommand(
       } catch (err) {
         window.showErrorMessage("i18n-boost: Failed to copy key");
       }
-    }
+    },
   );
 
   return disposable;
@@ -56,7 +57,7 @@ export function registerCopyFullKeyCommand(
 
 async function extractFilePrefix(
   document: import("vscode").TextDocument,
-  configManager: ConfigManager
+  configManager: ConfigManager,
 ): Promise<string> {
   const fileNamingPattern = await configManager.getFileNamingPattern();
   const keyStrategy = await configManager.getKeyStrategy();
@@ -71,20 +72,30 @@ async function extractFilePrefix(
   const wsFolders = workspace.workspaceFolders;
   if (!wsFolders || wsFolders.length === 0) return "";
 
-  const workspaceRoot = wsFolders[0].uri.fsPath;
-  const localesPath = await configManager.getLocalesPath();
-  const fullLocalesPath = join(workspaceRoot, localesPath);
+  const localesPaths = await configManager.getLocalesPaths();
+  const roots = await discoverLocaleRoots(localesPaths);
 
   const docFsPath = document.uri.fsPath;
-  const normalizedDoc = normalize(docFsPath);
-  const normalizedLocales = normalize(fullLocalesPath) + sep;
+  // Find which root this file belongs to
+  const matchingRoot = roots
+    .sort((a, b) => b.path.length - a.path.length)
+    .find((root) => docFsPath.startsWith(root.path));
 
-  if (!normalizedDoc.startsWith(normalizedLocales)) {
+  if (!matchingRoot) return "";
+
+  const normalizedDoc = normalize(docFsPath);
+  const normalizedRoot = normalize(matchingRoot.path);
+
+  if (!normalizedDoc.startsWith(normalizedRoot)) {
     return "";
   }
 
   // Get relative path from locales folder
-  const relativePath = normalizedDoc.substring(normalizedLocales.length);
+  // relative path should handle sep correctly
+  let relativePath = normalizedDoc.substring(normalizedRoot.length);
+  if (relativePath.startsWith(sep))
+    relativePath = relativePath.substring(sep.length);
+
   const pathParts = relativePath.split(sep);
 
   // Remove locale name (first part, e.g., "en", "ar")
