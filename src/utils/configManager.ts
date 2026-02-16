@@ -3,11 +3,13 @@ import {
   getLocaleFilePath,
   detectFileNamingPattern,
   LocaleInfo,
+  LocaleRoot,
+  discoverLocaleRoots,
 } from "./localeDiscovery";
-import { workspace, Disposable } from "vscode";
+import { workspace, Disposable, Uri } from "vscode";
 
 export interface I18nBoostSettings {
-  localesPath: string;
+  localesPaths: string[];
   defaultLocale: string;
   functionNames: string[];
   fileNamingPattern: "locale.json" | "locale/**/*.json" | "auto";
@@ -18,6 +20,7 @@ export interface I18nBoostSettings {
 export class ConfigManager {
   private settings: I18nBoostSettings | null = null;
   private supportedLocales: LocaleInfo[] | null = null;
+  private localeRoots: LocaleRoot[] | null = null;
 
   /**
    * Load settings from VS Code configuration
@@ -27,8 +30,13 @@ export class ConfigManager {
 
     const config = workspace.getConfiguration("i18nBoost");
 
+    const rawLocalesPath = config.get<string | string[]>("localesPath");
+    const localesPaths = Array.isArray(rawLocalesPath)
+      ? rawLocalesPath
+      : [rawLocalesPath || "src/i18n"];
+
     this.settings = {
-      localesPath: config.get<string>("localesPath") || "src/i18n",
+      localesPaths,
       defaultLocale: config.get<string>("defaultLocale") || "en",
       functionNames: config.get<string[]>("functionNames") || [
         "t",
@@ -40,15 +48,15 @@ export class ConfigManager {
       ],
       fileNamingPattern:
         config.get<"locale.json" | "locale/**/*.json" | "auto">(
-          "fileNamingPattern"
+          "fileNamingPattern",
         ) || "auto",
       keyStrategy: config.get<"filename" | "flat">("keyStrategy") || "filename",
       enabled: config.get<boolean>("enabled") !== false,
     };
 
     if (this.settings.fileNamingPattern === "auto") {
-      this.settings.fileNamingPattern = detectFileNamingPattern(
-        this.settings.localesPath
+      this.settings.fileNamingPattern = await detectFileNamingPattern(
+        this.settings.localesPaths,
       );
     }
 
@@ -71,11 +79,11 @@ export class ConfigManager {
   }
 
   /**
-   * Get the locales path
+   * Get the locales paths
    */
-  async getLocalesPath(): Promise<string> {
+  async getLocalesPaths(): Promise<string[]> {
     const settings = await this.getSettings();
-    return settings.localesPath;
+    return settings.localesPaths;
   }
 
   /**
@@ -113,37 +121,88 @@ export class ConfigManager {
   }
 
   /**
-   * Dynamically discover and cache supported locales
+   * Get discoverd locale roots (cached)
    */
-  async getSupportedLocales(): Promise<LocaleInfo[]> {
-    if (this.supportedLocales) return this.supportedLocales;
-
+  async getLocaleRoots(): Promise<LocaleRoot[]> {
+    if (this.localeRoots) return this.localeRoots;
     const settings = await this.getSettings();
-    this.supportedLocales = await discoverSupportedLocales(
-      settings.localesPath,
-      settings.fileNamingPattern as any
-    );
-
-    return this.supportedLocales;
+    this.localeRoots = await discoverLocaleRoots(settings.localesPaths);
+    return this.localeRoots;
   }
 
   /**
-   * Get available locales (same as getSupportedLocales for backward compatibility)
+   * Dynamically discover and cache supported locales.
+   * If documentUri is provided, filters locales based on monorepo context.
    */
-  async getAvailableLocales(): Promise<LocaleInfo[]> {
-    return await this.getSupportedLocales();
+  async getSupportedLocales(documentUri?: Uri): Promise<LocaleInfo[]> {
+    const settings = await this.getSettings();
+
+    // Always discover all locales first (cached if possible)
+    if (!this.supportedLocales) {
+      this.supportedLocales = await discoverSupportedLocales(
+        settings.localesPaths,
+        settings.fileNamingPattern as any,
+      );
+    }
+
+    if (!documentUri) {
+      return this.supportedLocales;
+    }
+
+    // Filter based on context
+    const resolvedRoots = await this.resolveLocaleRoots(documentUri);
+
+    // Return locales that belong to any of the resolved roots
+    return this.supportedLocales.filter((locale) =>
+      resolvedRoots.some((root) => locale.path.startsWith(root)),
+    );
   }
 
   /**
-   * Get file path for a specific locale
+   * Get available locales
    */
-  async getLocaleFilePath(locale: string): Promise<string> {
+  async getAvailableLocales(documentUri?: Uri): Promise<LocaleInfo[]> {
+    return await this.getSupportedLocales(documentUri);
+  }
+
+  /**
+   * Get all file paths for a specific locale (context-aware)
+   */
+  async getLocaleFilePaths(
+    locale: string,
+    documentUri?: Uri,
+  ): Promise<string[]> {
     const settings = await this.getSettings();
-    return getLocaleFilePath(
-      locale,
-      settings.localesPath,
-      settings.fileNamingPattern as any
-    );
+
+    if (documentUri) {
+      const locales = await this.getSupportedLocales(documentUri);
+      return locales.filter((l) => l.locale === locale).map((l) => l.path);
+    }
+
+    // Fallback if no context: return all discovered paths for this locale
+    if (this.supportedLocales) {
+      return this.supportedLocales
+        .filter((l) => l.locale === locale)
+        .map((l) => l.path);
+    }
+
+    // Ultimate fallback for static paths (legacy)
+    return [
+      getLocaleFilePath(
+        locale,
+        settings.localesPaths,
+        settings.fileNamingPattern as any,
+      ),
+    ];
+  }
+
+  /**
+   * Get file path for a specific locale (returns first match)
+   * @deprecated Use getLocaleFilePaths instead for monorepo support
+   */
+  async getLocaleFilePath(locale: string, documentUri?: Uri): Promise<string> {
+    const paths = await this.getLocaleFilePaths(locale, documentUri);
+    return paths.length > 0 ? paths[0] : "";
   }
 
   /**
@@ -152,6 +211,7 @@ export class ConfigManager {
   resetCache(): void {
     this.settings = null;
     this.supportedLocales = null;
+    this.localeRoots = null;
   }
 
   /**
@@ -163,5 +223,46 @@ export class ConfigManager {
         this.resetCache();
       }
     });
+  }
+
+  /**
+   * Resolves the list of relevant locale roots for a given document.
+   * Implements Group-based Isolation:
+   * 1. Own Root (ancestor): Include.
+   * 2. Shared Roots (different pattern index): Include.
+   * 3. Sibling Roots (same pattern index but different path): Exclude.
+   */
+  async resolveLocaleRoots(documentUri: Uri): Promise<string[]> {
+    const allRoots = await this.getLocaleRoots();
+    const docPath = documentUri.fsPath;
+
+    // 1. Find Primary Root (Closest Ancestor)
+    // We sort roots by length descending to find the longest matching prefix (deepest ancestor)
+    const sortedRoots = [...allRoots].sort(
+      (a, b) => b.path.length - a.path.length,
+    );
+    const primaryRoot = sortedRoots.find((r) => docPath.startsWith(r.path));
+
+    if (!primaryRoot) {
+      // If no ancestor found, maybe this file is outside any known app/lib?
+      // Fallback: return all roots or just shared?
+      // Let's return all for maximum discoverability if we can't determine context.
+      return allRoots.map((r) => r.path);
+    }
+
+    // 2. Filter Roots
+    return allRoots
+      .filter((root) => {
+        // Include Primary Root
+        if (root.path === primaryRoot.path) return true;
+
+        // Exclude Siblings (Same Pattern Index)
+        if (root.sourcePatternIndex === primaryRoot.sourcePatternIndex)
+          return false;
+
+        // Include Shared (Different Pattern Index)
+        return true;
+      })
+      .map((r) => r.path);
   }
 }
