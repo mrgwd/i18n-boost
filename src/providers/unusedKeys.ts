@@ -27,13 +27,15 @@ type KeyWithRange = {
  */
 export class I18nUnusedKeysDiagnostics {
   private diagnostics: DiagnosticCollection;
-  private usedKeysCache: Set<string> = new Set();
+  // Cache of used keys PER ROOT path.
+  // Map<RootPath, Set<Key>>
+  private usedKeysPerRoot: Map<string, Set<string>> = new Map();
   private recomputeTimer: ReturnType<typeof setTimeout> | null = null;
   private isComputing = false;
 
   constructor(private readonly configManager: ConfigManager) {
     this.diagnostics = languages.createDiagnosticCollection(
-      "i18n-boost-unused-keys"
+      "i18n-boost-unused-keys",
     );
   }
 
@@ -47,34 +49,38 @@ export class I18nUnusedKeysDiagnostics {
     context.subscriptions.push(
       workspace.onDidSaveTextDocument((doc) => {
         if (this.isCodeFile(doc)) this.scheduleRecompute();
-      })
+      }),
     );
 
     // Refresh diagnostics when a locale file opens or changes
     context.subscriptions.push(
-      workspace.onDidOpenTextDocument((doc) => this.refreshFor(doc))
+      workspace.onDidOpenTextDocument((doc) => this.refreshFor(doc)),
     );
     context.subscriptions.push(
-      workspace.onDidChangeTextDocument((e) => this.refreshFor(e.document))
+      workspace.onDidChangeTextDocument((e) => this.refreshFor(e.document)),
     );
     context.subscriptions.push(
-      workspace.onDidSaveTextDocument((doc) => this.refreshFor(doc))
+      workspace.onDidSaveTextDocument((doc) => this.refreshFor(doc)),
     );
 
     // Config changes
     context.subscriptions.push(
-      workspace.onDidChangeConfiguration(() => this.scheduleRecompute())
+      workspace.onDidChangeConfiguration(() => this.scheduleRecompute()),
     );
 
     // File system watcher for locale directory
     (async () => {
-      const localesGlob = await this.getLocalesGlob();
-      if (!localesGlob) return;
-      const watcher = workspace.createFileSystemWatcher(localesGlob);
-      watcher.onDidCreate((uri) => this.refreshOpenDocForUri(uri));
-      watcher.onDidChange((uri) => this.refreshOpenDocForUri(uri));
-      watcher.onDidDelete((uri) => this.diagnostics.delete(uri));
-      context.subscriptions.push(watcher);
+      const roots = await this.configManager.getLocaleRoots();
+      // Create watchers for each root
+      for (const root of roots) {
+        const watcher = workspace.createFileSystemWatcher(
+          new RelativePattern(root.path, "**/*.json"),
+        );
+        watcher.onDidCreate((uri) => this.refreshOpenDocForUri(uri));
+        watcher.onDidChange((uri) => this.refreshOpenDocForUri(uri));
+        watcher.onDidDelete((uri) => this.diagnostics.delete(uri));
+        context.subscriptions.push(watcher);
+      }
     })();
 
     // Refresh all currently open locale documents on activation
@@ -86,7 +92,7 @@ export class I18nUnusedKeysDiagnostics {
   private isCodeFile(doc: TextDocument): boolean {
     const ext = extname(doc.uri.fsPath).toLowerCase();
     return [".ts", ".tsx", ".js", ".jsx", ".vue", ".svelte", ".html"].includes(
-      ext
+      ext,
     );
   }
 
@@ -94,7 +100,7 @@ export class I18nUnusedKeysDiagnostics {
     if (this.recomputeTimer) clearTimeout(this.recomputeTimer);
     this.recomputeTimer = setTimeout(
       () => this.recomputeUsedKeysAndRefresh(),
-      delayMs
+      delayMs,
     );
   }
 
@@ -109,7 +115,7 @@ export class I18nUnusedKeysDiagnostics {
 
   private async refreshOpenDocForUri(uri: Uri) {
     const doc = workspace.textDocuments.find(
-      (d) => d.uri.toString() === uri.toString()
+      (d) => d.uri.toString() === uri.toString(),
     );
     if (doc) this.refreshFor(doc);
   }
@@ -121,27 +127,33 @@ export class I18nUnusedKeysDiagnostics {
       return;
     }
 
-    if (!(await this.isLocaleDocument(document))) {
+    // Determine if this is a locale document and WHICH root it belongs to
+    const matchingRoot = await this.getMatchingRoot(document);
+
+    if (!matchingRoot) {
       return;
     }
 
     const diagnostics: Diagnostic[] = [];
     const keys = this.collectKeysWithRanges(document);
 
-    // Get file prefix for multi-file structures (Cases 3 & 4)
-    const filePrefix = await this.extractFilePrefix(document);
+    // Get file prefix for multi-file structures
+    const filePrefix = await this.extractFilePrefix(document, matchingRoot);
+
+    // Get used keys specifically for this root
+    const usedKeys = this.usedKeysPerRoot.get(matchingRoot) || new Set();
 
     for (const k of keys) {
       if (!k.isLeaf) continue;
 
       // Build the full key path including file prefix if applicable
       const fullKeyPath = filePrefix ? `${filePrefix}.${k.keyPath}` : k.keyPath;
-      if (this.usedKeysCache.has(fullKeyPath)) continue;
+      if (usedKeys.has(fullKeyPath)) continue;
 
       const diag = new Diagnostic(
         k.range,
-        `Unused i18n key: ${fullKeyPath}`,
-        DiagnosticSeverity.Hint
+        `Unused i18n key: ${fullKeyPath} (in context of ${matchingRoot})`,
+        DiagnosticSeverity.Hint,
       );
       diag.tags = [DiagnosticTag.Unnecessary];
       diagnostics.push(diag);
@@ -150,40 +162,20 @@ export class I18nUnusedKeysDiagnostics {
     this.diagnostics.set(document.uri, diagnostics);
   }
 
-  private async isLocaleDocument(document: TextDocument): Promise<boolean> {
+  private async getMatchingRoot(
+    document: TextDocument,
+  ): Promise<string | null> {
     if (document.languageId !== "json" && document.languageId !== "jsonc") {
-      return false;
+      return null;
     }
-    const localesPath = await this.configManager.getLocalesPath();
-    if (!localesPath) return false;
 
-    const wsFolders = workspace.workspaceFolders;
-    if (!wsFolders || wsFolders.length === 0) return false;
-    const workspaceRoot = wsFolders[0].uri.fsPath;
-    const fullLocalesPath = join(workspaceRoot, localesPath);
+    const roots = await this.configManager.getLocaleRoots();
+    const docPath = document.uri.fsPath;
 
-    const docFsPath = document.uri.fsPath;
-    const normalizedDoc = normalize(docFsPath);
-    const normalizedLocales = normalize(fullLocalesPath) + sep;
-    return normalizedDoc.startsWith(normalizedLocales);
-  }
-
-  private async getLocalesGlob(): Promise<string | null> {
-    const localesPath = await this.configManager.getLocalesPath();
-    if (!localesPath) return null;
-    const fileNamingPattern = await this.configManager.getFileNamingPattern();
-    const relBase = this.toWorkspaceRelativeGlob(localesPath);
-
-    switch (fileNamingPattern) {
-      case "locale.json":
-        return new RelativePattern(relBase, "*.json").pattern;
-      default:
-        return new RelativePattern(relBase, "**/*.json").pattern;
-    }
-  }
-
-  private toWorkspaceRelativeGlob(absPath: string): string {
-    return absPath;
+    const match = roots
+      .sort((a, b) => b.path.length - a.path.length)
+      .find((r) => docPath.startsWith(r.path));
+    return match ? match.path : null;
   }
 
   private collectKeysWithRanges(document: TextDocument): KeyWithRange[] {
@@ -204,7 +196,7 @@ export class I18nUnusedKeysDiagnostics {
           const keyText = this.extractStringFromQuoted(
             text,
             keyNode.offset,
-            keyNode.length
+            keyNode.length,
           );
           const newPath = [...pathParts, keyText];
           const keyPath = newPath.join(".");
@@ -237,7 +229,7 @@ export class I18nUnusedKeysDiagnostics {
   private extractStringFromQuoted(
     source: string,
     offset: number,
-    length: number
+    length: number,
   ): string {
     const raw = source.substring(offset, offset + length);
     if (raw.length >= 2 && (raw.startsWith('"') || raw.startsWith("'"))) {
@@ -248,43 +240,31 @@ export class I18nUnusedKeysDiagnostics {
 
   /**
    * Extract the file prefix that should be prepended to keys
-   * For multi-file structures (Cases 3 & 4), the filename/folder path is part of the key
-   *
-   * Examples:
-   * - en/errors.json -> "errors"
-   * - en/auth/login.json -> "auth.login"
-   * - en/common.json -> "" (special case, no prefix)
-   * - en/index.json -> "" (special case, no prefix)
-   * - en.json -> "" (flat structure, no prefix)
    */
-  private async extractFilePrefix(document: TextDocument): Promise<string> {
+  private async extractFilePrefix(
+    document: TextDocument,
+    rootPath: string,
+  ): Promise<string> {
     const fileNamingPattern = await this.configManager.getFileNamingPattern();
     const keyStrategy = await this.configManager.getKeyStrategy();
 
-    // Case 1: Flat structure (en.json, ar.json) - no prefix
-    // OR keyStrategy is "flat" - no prefix
     if (fileNamingPattern === "locale.json" || keyStrategy === "flat") {
       return "";
     }
 
-    // Cases 2, 3, 4: Directory-based structure
-    const wsFolders = workspace.workspaceFolders;
-    if (!wsFolders || wsFolders.length === 0) return "";
-
-    const workspaceRoot = wsFolders[0].uri.fsPath;
-    const localesPath = await this.configManager.getLocalesPath();
-    const fullLocalesPath = join(workspaceRoot, localesPath);
-
     const docFsPath = document.uri.fsPath;
     const normalizedDoc = normalize(docFsPath);
-    const normalizedLocales = normalize(fullLocalesPath) + sep;
+    const normalizedRoot = normalize(rootPath);
 
-    if (!normalizedDoc.startsWith(normalizedLocales)) {
+    if (!normalizedDoc.startsWith(normalizedRoot)) {
       return "";
     }
 
     // Get relative path from locales folder
-    const relativePath = normalizedDoc.substring(normalizedLocales.length);
+    let relativePath = normalizedDoc.substring(normalizedRoot.length);
+    if (relativePath.startsWith(sep))
+      relativePath = relativePath.substring(sep.length);
+
     const pathParts = relativePath.split(sep);
 
     // Remove locale name (first part, e.g., "en", "ar")
@@ -292,26 +272,20 @@ export class I18nUnusedKeysDiagnostics {
       pathParts.shift();
     }
 
-    // If no parts left, it's Case 2 (single file in locale folder)
     if (pathParts.length === 0) {
       return "";
     }
 
-    // Build prefix from remaining parts
     const prefixParts: string[] = [];
-
     for (let i = 0; i < pathParts.length; i++) {
       const part = pathParts[i];
-
       // Last part is the filename
       if (i === pathParts.length - 1) {
         const filename = part.replace(".json", "");
-        // Skip common.json and index.json as they don't add to the key prefix
         if (filename !== "common" && filename !== "index") {
           prefixParts.push(filename);
         }
       } else {
-        // Folder names are always part of the prefix
         prefixParts.push(part);
       }
     }
@@ -319,40 +293,17 @@ export class I18nUnusedKeysDiagnostics {
     return prefixParts.join(".");
   }
 
-  /**
-   * Strip comments from source code to avoid counting commented translation keys as "used"
-   * Handles:
-   * - Single-line comments: // ...
-   * - Multi-line comments: /* ... *\/
-   * - JSX comments: {/* ... *\/}
-   * - HTML comments: <!-- ... -->
-   *
-   * Note: This is a best-effort approach using regex. It covers 95%+ of cases
-   * but may have edge cases with strings containing comment-like patterns.
-   */
   private stripComments(code: string): string {
     let result = code;
-
-    // Step 1: Remove multi-line comments /* ... */ and JSX comments {/* ... */}
-    // This regex handles nested braces and preserves strings
     result = result.replace(/\/\*[\s\S]*?\*\//gm, (match) => {
-      // Preserve newlines to maintain line structure for better debugging
       return match.replace(/[^\n]/g, " ");
     });
-
-    // Step 2: Remove single-line comments // ...
-    // But preserve URLs (http://, https://) and comment-like patterns in strings
     result = result.replace(/^(\s*)\/\/.*$/gm, (match, indent) => {
-      // Preserve the indentation and newline
       return indent;
     });
-
-    // Step 3: Remove JSX-style comments {/* ... */} that might remain
     result = result.replace(/\{\s*\/\*[\s\S]*?\*\/\s*\}/gm, (match) => {
       return match.replace(/[^\n]/g, " ");
     });
-
-    // Step 4: Remove HTML comments <!-- ... -->
     result = result.replace(/<!--[\s\S]*?-->/gm, (match) => {
       return match.replace(/[^\n]/g, " ");
     });
@@ -365,7 +316,7 @@ export class I18nUnusedKeysDiagnostics {
     try {
       const enabled = await this.configManager.isEnabled();
       if (!enabled) {
-        this.usedKeysCache = new Set();
+        this.usedKeysPerRoot.clear();
         return;
       }
 
@@ -375,21 +326,28 @@ export class I18nUnusedKeysDiagnostics {
 
       const files = await workspace.findFiles(includeGlob, excludeGlob);
 
-      const used: Set<string> = new Set();
+      // Map<RootPath, Set<Key>>
+      const newUsedKeysPerRoot = new Map<string, Set<string>>();
+
       const relCallPattern = new RegExp(
         "(?:^|[^A-Za-z0-9_])(?:" +
           functionNames.map((n) => n.replace(/\./g, "\\.")).join("|") +
           ")\\s*\\(\\s*[\"'`]([^\"'`]+)[\"'`]",
-        "gm"
+        "gm",
       );
       const baseKeyRegex = /useTranslations?\s*\(\s*[\"'`]([^\"'`]+)[\"'`]/gm;
 
       for (const uri of files) {
         try {
+          // Identify which roots this file is relevant for
+          const relevantRoots =
+            await this.configManager.resolveLocaleRoots(uri);
+
+          if (relevantRoots.length === 0) continue;
+
           const bytes = await workspace.fs.readFile(uri);
           let text = Buffer.from(bytes).toString("utf8");
 
-          // Strip comments to avoid counting commented translation keys as "used"
           text = this.stripComments(text);
 
           const baseKeys = new Set<string>();
@@ -398,13 +356,28 @@ export class I18nUnusedKeysDiagnostics {
             if (bm[1]) baseKeys.add(bm[1]);
           }
 
+          const fileUsedKeys = new Set<string>();
+
           let m: RegExpExecArray | null;
           while ((m = relCallPattern.exec(text)) !== null) {
             const raw = m[1];
             if (!raw) continue;
-            used.add(raw);
+            fileUsedKeys.add(raw);
             for (const base of baseKeys) {
-              if (!raw.startsWith(base + ".")) used.add(`${base}.${raw}`);
+              if (!raw.startsWith(base + "."))
+                fileUsedKeys.add(`${base}.${raw}`);
+            }
+          }
+
+          // Add found keys to ALL relevant roots
+          for (const key of fileUsedKeys) {
+            for (const root of relevantRoots) {
+              let rootSet = newUsedKeysPerRoot.get(root);
+              if (!rootSet) {
+                rootSet = new Set();
+                newUsedKeysPerRoot.set(root, rootSet);
+              }
+              rootSet.add(key);
             }
           }
         } catch {
@@ -412,9 +385,7 @@ export class I18nUnusedKeysDiagnostics {
         }
       }
 
-      // Replace the cache with the newly computed set of used keys
-      // This ensures keys that are no longer used will be properly flagged as unused
-      this.usedKeysCache = used;
+      this.usedKeysPerRoot = newUsedKeysPerRoot;
     } finally {
       this.isComputing = false;
     }
