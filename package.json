@@ -2,7 +2,7 @@
   "name": "i18n-boost",
   "displayName": "I18n Boost",
   "publisher": "mrgwd",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "engines": {
     "vscode": "^1.80.0"
   },
@@ -12,7 +12,7 @@
     "color": "#1e1e1e",
     "theme": "dark"
   },
-  "description": "Streamline your i18n workflow — works with your favorite library.",
+  "description": "Supercharge your i18n workflow — works with your favorite library.",
   "categories": [
     "Other"
   ],
@@ -58,9 +58,19 @@
       "title": "I18n Boost Configuration",
       "properties": {
         "i18nBoost.localesPath": {
-          "type": "string",
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          ],
           "default": "src/i18n",
-          "description": "Path to translation files folder (relative to workspace root)."
+          "description": "Path to translation files folder (relative to workspace root). Can be a string or an array of strings (supports globs)."
         },
         "i18nBoost.defaultLocale": {
           "type": "string",
