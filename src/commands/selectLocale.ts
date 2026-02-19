@@ -5,20 +5,20 @@ import { commands, Disposable, window } from "vscode";
 
 export function registerSelectLocaleCommand(
   configManager: ConfigManager,
-  navigationProvider: I18nNavigationProvider
+  navigationProvider: I18nNavigationProvider,
 ): Disposable {
   const disposable = commands.registerCommand(
     "i18nBoost.selectLocale",
     async () => {
       await selectLocaleAndNavigate(configManager, navigationProvider);
-    }
+    },
   );
   return disposable;
 }
 
 async function selectLocaleAndNavigate(
   configManager: ConfigManager,
-  navigationProvider: I18nNavigationProvider
+  navigationProvider: I18nNavigationProvider,
 ) {
   const editor = window.activeTextEditor;
   if (!editor) {
@@ -29,7 +29,7 @@ async function selectLocaleAndNavigate(
   const enabled = await configManager.isEnabled();
   if (!enabled) {
     window.showWarningMessage(
-      "I18n Boost is disabled. Please enable it in VS Code settings."
+      "I18n Boost is disabled. Please enable it in VS Code settings.",
     );
     return;
   }
@@ -42,15 +42,17 @@ async function selectLocaleAndNavigate(
   const translationKey = extractTranslationKeyFromLine(
     line,
     position.character,
-    functionNames
+    functionNames,
   );
   if (!translationKey) {
     window.showWarningMessage("No translation key found at cursor position");
     return;
   }
 
-  // Show locale selection
-  const availableLocales = await configManager.getSupportedLocales();
+  // Show locale selection (Context Aware)
+  const availableLocales = await configManager.getSupportedLocales(
+    editor.document.uri,
+  );
   const existingLocales = availableLocales.filter((locale) => locale.exists);
 
   if (existingLocales.length === 0) {
@@ -69,7 +71,8 @@ async function selectLocaleAndNavigate(
   if (quickPickItems.length === 1) {
     await navigationProvider.navigateToLocale(
       translationKey,
-      quickPickItems[0].locale
+      quickPickItems[0].locale,
+      editor.document.uri,
     );
     return;
   }
@@ -79,6 +82,10 @@ async function selectLocaleAndNavigate(
   });
 
   if (selected) {
-    await navigationProvider.navigateToLocale(translationKey, selected.locale);
+    await navigationProvider.navigateToLocale(
+      translationKey,
+      selected.locale,
+      editor.document.uri,
+    );
   }
 }

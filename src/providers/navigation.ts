@@ -19,7 +19,7 @@ export class I18nNavigationProvider implements DefinitionProvider {
 
   async provideDefinition(
     document: TextDocument,
-    position: Position
+    position: Position,
   ): Promise<Location | null> {
     const enabled = await this.configManager.isEnabled();
     if (!enabled) {
@@ -28,7 +28,7 @@ export class I18nNavigationProvider implements DefinitionProvider {
     const translationKey = await getTranslationKeyAtPosition(
       document,
       position,
-      this.configManager
+      this.configManager,
     );
 
     if (!translationKey) {
@@ -37,35 +37,30 @@ export class I18nNavigationProvider implements DefinitionProvider {
 
     // Navigate to default locale
     const defaultLocale = await this.configManager.getDefaultLocale();
-    const defaultLocalePath = await this.configManager.getLocaleFilePath(
-      defaultLocale
+    const defaultLocalePaths = await this.configManager.getLocaleFilePaths(
+      defaultLocale,
+      document.uri,
     );
     const keyStrategy = await this.configManager.getKeyStrategy();
 
-    // Check if locale path exists (file or directory)
-    if (!existsSync(defaultLocalePath)) {
-      window.showWarningMessage(
-        `Default locale not found: ${defaultLocalePath}`
+    // Iterate through all paths
+    for (const localePath of defaultLocalePaths) {
+      if (!existsSync(localePath)) continue;
+
+      const result = await findKeyInLocale(
+        translationKey,
+        localePath,
+        keyStrategy,
       );
-      return null;
+
+      if (result) {
+        return new Location(
+          Uri.file(result.filePath),
+          new Position(result.position.line, result.position.character),
+        );
+      }
     }
 
-    const result = await findKeyInLocale(
-      translationKey,
-      defaultLocalePath,
-      keyStrategy
-    );
-
-    if (result) {
-      return new Location(
-        Uri.file(result.filePath),
-        new Position(result.position.line, result.position.character)
-      );
-    }
-
-    window.showWarningMessage(
-      `Key "${translationKey}" not found in default locale`
-    );
     return null;
   }
 
@@ -74,35 +69,39 @@ export class I18nNavigationProvider implements DefinitionProvider {
    */
   async navigateToLocale(
     translationKey: string,
-    locale: string
+    locale: string,
+    contextUri?: Uri,
   ): Promise<boolean> {
-    const localePath = await this.configManager.getLocaleFilePath(locale);
+    const localePaths = await this.configManager.getLocaleFilePaths(
+      locale,
+      contextUri,
+    );
     const keyStrategy = await this.configManager.getKeyStrategy();
 
-    if (!existsSync(localePath)) {
-      window.showWarningMessage(`Locale not found: ${localePath}`);
-      return false;
-    }
+    // Iterate
+    for (const localePath of localePaths) {
+      if (!existsSync(localePath)) continue;
 
-    const result = await findKeyInLocale(
-      translationKey,
-      localePath,
-      keyStrategy
-    );
-    if (result) {
-      const document = await workspace.openTextDocument(result.filePath);
-      const editor = await window.showTextDocument(document);
-      const position = new Position(
-        result.position.line,
-        result.position.character
+      const result = await findKeyInLocale(
+        translationKey,
+        localePath,
+        keyStrategy,
       );
-      editor.selection = new Selection(position, position);
-      editor.revealRange(new Range(position, position));
-      return true;
+      if (result) {
+        const document = await workspace.openTextDocument(result.filePath);
+        const editor = await window.showTextDocument(document);
+        const position = new Position(
+          result.position.line,
+          result.position.character,
+        );
+        editor.selection = new Selection(position, position);
+        editor.revealRange(new Range(position, position));
+        return true;
+      }
     }
 
     window.showWarningMessage(
-      `Key "${translationKey}" not found in ${locale} locale`
+      `Key "${translationKey}" not found in ${locale} locale`,
     );
     return false;
   }

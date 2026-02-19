@@ -8,24 +8,23 @@ import {
   SnippetString,
   MarkdownString,
   RelativePattern,
-  FileSystemWatcher,
+  Disposable,
 } from "vscode";
 import { ConfigManager } from "../utils/configManager";
 import { findBaseKey } from "../utils/findBaseKey";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, readFileSync, statSync } from "fs";
 import { parse } from "jsonc-parser";
+import { join } from "path";
+import { LocaleRoot } from "../utils/localeDiscovery";
 
-/**
- * A completion provider for i18n keys that dynamically loads translations.
- * It suggests keys based on the user's input within configured function calls.
- */
 export class I18nCompletionProvider implements CompletionItemProvider {
-  private translations: Record<string, any> = {};
-  private watcher: FileSystemWatcher | undefined;
+  // Cache translations per root path
+  private translationsCache: Map<string, any> = new Map();
+  private watchers: Disposable[] = [];
 
   constructor(
     private configManager: ConfigManager,
-    onConfigChange?: () => void
+    onConfigChange?: () => void,
   ) {
     this.loadTranslations();
     // Reload translations when the config changes
@@ -36,155 +35,189 @@ export class I18nCompletionProvider implements CompletionItemProvider {
       // Call the callback immediately to set up the listener
       onConfigChange();
     }
-
-    // Setup and keep a persistent watcher for default locale files
-    (async () => {
-      await this.setupWatcher();
-    })();
-    workspace.onDidChangeConfiguration(async () => {
-      await this.setupWatcher();
-    });
   }
 
   /**
    * Method to reload translations when config changes
    */
-  public reloadTranslations() {
-    this.loadTranslations();
+  public async reloadTranslations() {
+    await this.loadTranslations();
   }
 
   /**
-   * Loads and parses the translation file for the default locale.
+   * Loads and parses the translation file for the default locale from ALL roots.
    */
   private async loadTranslations() {
     const enabled = await this.configManager.isEnabled();
     if (!enabled) {
-      this.translations = {};
+      this.translationsCache.clear();
       return;
     }
 
+    // Clear existing cache
+    this.translationsCache.clear();
+
+    const roots = await this.configManager.getLocaleRoots();
+    if (!roots || roots.length === 0) return;
+
+    // Load translations for each root
+    for (const root of roots) {
+      await this.loadTranslationsForRoot(root);
+    }
+
+    // Setup watchers for the roots
+    this.setupWatchers(roots);
+  }
+
+  private async loadTranslationsForRoot(root: LocaleRoot) {
     try {
       const defaultLocale = await this.configManager.getDefaultLocale();
-      const defaultLocalePath = await this.configManager.getLocaleFilePath(
-        defaultLocale
-      );
+      const fileNamingPattern = await this.configManager.getFileNamingPattern();
+      const keyStrategy = await this.configManager.getKeyStrategy();
+
+      let defaultLocalePath: string;
+
+      // Determine path to default locale for this root
+      if (fileNamingPattern === "locale.json") {
+        defaultLocalePath = join(root.path, `${defaultLocale}.json`);
+      } else {
+        defaultLocalePath = join(root.path, defaultLocale);
+      }
+
+      let translations: any = {};
 
       if (existsSync(defaultLocalePath)) {
-        const stats = require("fs").statSync(defaultLocalePath);
-        const keyStrategy = await this.configManager.getKeyStrategy();
+        const stats = statSync(defaultLocalePath);
 
         if (stats.isDirectory()) {
-          this.translations = this.loadDirectory(
-            defaultLocalePath,
-            keyStrategy
-          );
+          translations = this.loadDirectory(defaultLocalePath, keyStrategy);
         } else {
           const content = readFileSync(defaultLocalePath, "utf-8");
-          this.translations = parse(content);
+          translations = parse(content);
         }
-      } else {
-        this.translations = {};
       }
+
+      this.translationsCache.set(root.path, translations);
     } catch (error) {
-      // Failed to load or parse translation file
-      this.translations = {};
+      // Failed to load
+      console.error(`Failed to load translations for root ${root.path}`, error);
     }
   }
 
-  private async setupWatcher() {
-    try {
-      const defaultLocale = await this.configManager.getDefaultLocale();
-      const defaultLocalePath = await this.configManager.getLocaleFilePath(
-        defaultLocale
-      );
+  private setupWatchers(roots: LocaleRoot[]) {
+    // Dispose old watchers
+    this.watchers.forEach((w) => w.dispose());
+    this.watchers = [];
 
-      let watcherPattern: any;
+    // Create new watchers for each root
+    // We watch the root directory for any JSON changes
+    for (const root of roots) {
       try {
-        const fs = require("fs");
-        const path = require("path");
-        if (
-          fs.existsSync(defaultLocalePath) &&
-          fs.statSync(defaultLocalePath).isDirectory()
-        ) {
-          watcherPattern = new RelativePattern(defaultLocalePath, "**/*.json");
-        } else {
-          watcherPattern = new RelativePattern(
-            path.dirname(defaultLocalePath),
-            path.basename(defaultLocalePath)
-          );
-        }
-      } catch (e) {
-        return;
-      }
+        if (!existsSync(root.path)) continue;
 
-      this.watcher?.dispose();
-      this.watcher = workspace.createFileSystemWatcher(watcherPattern);
-      this.watcher.onDidChange(() => {
-        this.loadTranslations();
-      });
-      this.watcher.onDidCreate(() => {
-        this.loadTranslations();
-      });
-      this.watcher.onDidDelete(() => {
-        this.loadTranslations();
-      });
-    } catch (e) {
-      return;
+        const pattern = new RelativePattern(root.path, "**/*.json");
+        const watcher = workspace.createFileSystemWatcher(pattern);
+
+        // Reload specific root on change?
+        // For simplicity and correctness with "auto" patterns/resolutions,
+        // we can reload just the root or everything.
+        // Let's reload just the root to be efficient.
+        const reloadRoot = () => this.loadTranslationsForRoot(root);
+
+        watcher.onDidChange(reloadRoot);
+        watcher.onDidCreate(reloadRoot);
+        watcher.onDidDelete(reloadRoot);
+
+        this.watchers.push(watcher);
+      } catch (e) {
+        console.error("Failed to setup watcher for", root.path, e);
+      }
     }
   }
 
   private loadDirectory(
     dirPath: string,
-    keyStrategy: "filename" | "flat"
+    keyStrategy: "filename" | "flat",
   ): any {
     const fs = require("fs");
     const path = require("path");
     const result: any = {};
 
-    const items = fs.readdirSync(dirPath, { withFileTypes: true });
+    try {
+      const items = fs.readdirSync(dirPath, { withFileTypes: true });
 
-    for (const item of items) {
-      if (item.isFile() && item.name.endsWith(".json")) {
-        try {
-          const content = fs.readFileSync(
-            path.join(dirPath, item.name),
-            "utf-8"
-          );
-          const json = parse(content);
-          const fileName = item.name.replace(".json", "");
+      for (const item of items) {
+        if (item.isFile() && item.name.endsWith(".json")) {
+          try {
+            const content = fs.readFileSync(
+              path.join(dirPath, item.name),
+              "utf-8",
+            );
+            const json = parse(content);
+            const fileName = item.name.replace(".json", "");
 
-          if (keyStrategy === "flat") {
-            // Flatten all files into root
-            Object.assign(result, json);
-          } else {
-            if (fileName === "common" || fileName === "index") {
-              // Flatten common.json and index.json into root
+            if (keyStrategy === "flat") {
+              // Flatten all files into root
               Object.assign(result, json);
             } else {
-              // Namespace other files
-              result[fileName] = json;
+              if (fileName === "common" || fileName === "index") {
+                // Flatten common.json and index.json into root
+                Object.assign(result, json);
+              } else {
+                // Namespace other files
+                result[fileName] = json;
+              }
             }
+          } catch (e) {
+            // Ignore bad files
           }
-        } catch (e) {
-          // Ignore bad files
-        }
-      } else if (item.isDirectory()) {
-        const subResult = this.loadDirectory(
-          path.join(dirPath, item.name),
-          keyStrategy
-        );
+        } else if (item.isDirectory()) {
+          const subResult = this.loadDirectory(
+            path.join(dirPath, item.name),
+            keyStrategy,
+          );
 
-        if (keyStrategy === "flat") {
-          // Flatten subdirectories into root
-          Object.assign(result, subResult);
-        } else {
-          const key = item.name;
-          result[key] = subResult;
+          if (keyStrategy === "flat") {
+            // Flatten subdirectories into root
+            Object.assign(result, subResult);
+          } else {
+            const key = item.name;
+            result[key] = subResult;
+          }
         }
       }
+    } catch (e) {
+      /* ignore */
     }
 
     return result;
+  }
+
+  /**
+   * Deep merge two objects.
+   */
+  private deepMerge(target: any, source: any) {
+    if (typeof target !== "object" || target === null) return source;
+    if (typeof source !== "object" || source === null) return source; // Override if source is primitive? Or ignore?
+
+    for (const key of Object.keys(source)) {
+      const sourceValue = source[key];
+      const targetValue = target[key];
+
+      if (Array.isArray(sourceValue)) {
+        // Extract array? Or replace?
+        // i18n keys usually usually don't have arrays that merge.
+        target[key] = sourceValue;
+      } else if (typeof sourceValue === "object" && sourceValue !== null) {
+        if (!target[key]) {
+          target[key] = {};
+        }
+        this.deepMerge(target[key], sourceValue);
+      } else {
+        target[key] = sourceValue;
+      }
+    }
+    return target;
   }
 
   /**
@@ -195,7 +228,7 @@ export class I18nCompletionProvider implements CompletionItemProvider {
    */
   public async provideCompletionItems(
     document: TextDocument,
-    position: Position
+    position: Position,
   ): Promise<CompletionItem[]> {
     const enabled = await this.configManager.isEnabled();
     if (!enabled) {
@@ -218,6 +251,23 @@ export class I18nCompletionProvider implements CompletionItemProvider {
       return []; // Not inside a configured translation function.
     }
 
+    // --- Resolve Relevant Translations ---
+    // 1. Get relevant roots for this document
+    const relevantRoots = await this.configManager.resolveLocaleRoots(
+      document.uri,
+    );
+
+    // 2. Merge translations from these roots
+    const mergedTranslations = {};
+    for (const rootPath of relevantRoots) {
+      const rootTranslations = this.translationsCache.get(rootPath);
+      if (rootTranslations) {
+        this.deepMerge(mergedTranslations, rootTranslations);
+      }
+    }
+
+    // --- Continue with existing logic using mergedTranslations ---
+
     let keyPath = match[1];
     // --- Add base key logic ---
     const baseKey = findBaseKey(document, position);
@@ -231,7 +281,7 @@ export class I18nCompletionProvider implements CompletionItemProvider {
 
     const pathParts = keyPath.split(".").filter((p) => p.length > 0);
 
-    let currentObject: Record<string, any> = this.translations;
+    let currentObject: Record<string, any> = mergedTranslations;
     let lastPart = "";
 
     try {
@@ -272,13 +322,13 @@ export class I18nCompletionProvider implements CompletionItemProvider {
 
       const item = new CompletionItem(
         key,
-        isObject ? CompletionItemKind.Module : CompletionItemKind.Value
+        isObject ? CompletionItemKind.Module : CompletionItemKind.Value,
       );
 
       if (isObject) {
         item.insertText = new SnippetString(key + ".");
         item.documentation = new MarkdownString(
-          "This key has nested translations."
+          "This key has nested translations.",
         );
         item.command = {
           command: "editor.action.triggerSuggest",
