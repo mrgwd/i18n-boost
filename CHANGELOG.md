@@ -2,6 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
+## 1.2.0 (2026-02-21)
+
+### Added
+
+- **Monorepo Support**: `i18nBoost.localesPath` now accepts an array of paths or glob patterns (e.g., `["apps/*/src/locales", "packages/shared/locales"]`).
+- **Group-based Isolation**: Intelligently resolves relevant locales based on the specific file you are editing. Apps can see their own locales and shared locales, but remain isolated from sibling apps.
+- **Context-Aware Features**: Autocomplete, Hover, Navigation (Ctrl+Click), and Unused Keys seamlessly support multi-root setups and shared libraries.
+
+### Fixed
+
+- Fixed duplicate locale links in the hover menu when the same locale exists across multiple roots.
+
 ## 1.1.1 (2026-01-17)
 
 ### Added
