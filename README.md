@@ -5,7 +5,7 @@
 Supercharge your internationalization (i18n) workflow. Integrates directly into your editor to help you **navigate, manage, and use translation keys faster**.
 
   <p>
-  <img src="https://img.shields.io/badge/lightweight-152Kb-63ba84" alt="Download Size" />
+  <img src="https://img.shields.io/badge/lightweight-147Kb-63ba84" alt="Download Size" />
   <a href="https://marketplace.visualstudio.com/items?itemName=mrgwd.i18n-boost" target="__blank"><img src="https://img.shields.io/visual-studio-marketplace/v/mrgwd.i18n-boost?color=blue&amp;label=VS%20Code%20Marketplace&logo=visual-studio-code" alt="Visual Studio Marketplace Version" /></a>
   <a href="https://open-vsx.org/extension/mrgwd/i18n-boost" target="__blank"><img src="https://img.shields.io/open-vsx/dt/mrgwd/i18n-boost?color=a38eed" alt="Open VSX Downloads" /></a>
 
@@ -74,7 +74,7 @@ Scans your codebase to find translation keys that are defined but never used. Ju
 **How it works:**
 
 - Open your locale file (e.g., `en.json`).
-- Will automatically highlight unused keys.
+- Unused keys are automatically highlighted.
 - In-sync with your code, updating as you edit.
 
 ---
@@ -95,7 +95,7 @@ Effortlessly copy the full nested key path of any translation value in your loca
 
 ### ✨ Zero Config (Auto-Discovery)
 
-I18n Boost automatically detects your locale files and structure.
+I18n Boost automatically detects your locale files and structure in most common setups.
 If you follow standard conventions (e.g., `src/locales`, `src/i18n`, or `public/locales`), **you likely don't need to configure anything.**
 
 ### Settings
@@ -130,7 +130,6 @@ Define how your translation files are organized within the `localesPath`:
 This setting determines how the extension reads your translation keys. Choose the one that matches your i18n library usage:
 
 - **`filename` (Default)**: The file name acts as a namespace.
-
   - _Structure_: `locales/en/auth.json` containing key `login`.
   - _Usage_: `t("auth.login")`
   - _Best for_: Projects that split translations into multiple files (namespaces).
@@ -139,6 +138,23 @@ This setting determines how the extension reads your translation keys. Choose th
   - _Structure_: `locales/en.json` containing nested object `auth: { login: ... }`.
   - _Usage_: `t("auth.login")`
   - _Best for_: Projects using a single large translation file or libraries that merge all files.
+
+## 🏢 Monorepo & Multi-Root Support
+
+I18n Boost fully supports monorepos and multi-root setups through **Group-based Isolation**.
+
+Example of `i18nBoost.localesPath` with an array of globs:
+
+```json
+{
+  "i18nBoost.localesPath": [
+    "apps/first-app/src/locales",
+    "packages/**/locales"
+    ]
+}
+```
+
+Intelligently resolves relevant locales based on the file you are currently editing. Apps will see their own specific locales as well as shared locales, but remain completely isolated from sibling apps. Autocomplete, Hover, Navigation, and Unused Keys detection all natively support this structure.
 
 ### Example Configuration
 
