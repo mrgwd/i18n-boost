@@ -54,7 +54,7 @@ jobs:
         run: npx vsce package --no-dependencies
 
       - name: Comment PR with build info
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const fs = require('fs');
